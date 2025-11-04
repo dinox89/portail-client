@@ -2,7 +2,7 @@ services:
   - type: web
     name: portail-client
     runtime: node
-    buildCommand: npm install && npm run db:generate && npx prisma db push && npm run build
+    buildCommand: npm install --production=false && npm run db:generate && npx prisma db push && npm run build
     startCommand: npm run start
     healthCheckPath: /api/health
     autoDeploy: true
@@ -15,3 +15,5 @@ services:
         sync: false
       - key: ADMIN_EMAIL
         sync: false
+      - key: NPM_CONFIG_PRODUCTION
+        value: "false"
