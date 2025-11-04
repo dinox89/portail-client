@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: portail-client
+    runtime: node
+    buildCommand: npm install && npm run db:generate && npx prisma db push && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: NEXT_PUBLIC_ADMIN_USER_ID
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
