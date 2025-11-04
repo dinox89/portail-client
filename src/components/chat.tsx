@@ -1,0 +1,291 @@
+"use client";
+
+import { useState, useEffect, useRef } from "react";
+import { Send, Bell, BellOff } from "lucide-react";
+import { io, Socket } from "socket.io-client";
+
+interface Message {
+  id: string;
+  content: string;
+  senderId: string;
+  conversationId: string;
+  createdAt: string;
+  read: boolean;
+}
+
+interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface ChatProps {
+  conversationId: string;
+  currentUser: User;
+  onNewMessage?: () => void;
+}
+
+export default function Chat({ conversationId, currentUser, onNewMessage }: ChatProps) {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState("");
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [hasNotificationPermission, setHasNotificationPermission] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  // Refs pour éviter de recréer la connexion socket quand ces valeurs changent
+  const soundRef = useRef<boolean>(soundEnabled);
+  useEffect(() => { soundRef.current = soundEnabled; }, [soundEnabled]);
+  const notifyPermRef = useRef<boolean>(hasNotificationPermission);
+  useEffect(() => { notifyPermRef.current = hasNotificationPermission; }, [hasNotificationPermission]);
+  const onNewMessageRef = useRef<(() => void) | undefined>(onNewMessage);
+  useEffect(() => { onNewMessageRef.current = onNewMessage; }, [onNewMessage]);
+
+  // Request notification permission on mount
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission().then(permission => {
+        setHasNotificationPermission(permission === "granted");
+      });
+    } else if ("Notification" in window && Notification.permission === "granted") {
+      setHasNotificationPermission(true);
+    }
+  }, []);
+
+  // Load messages on mount
+  useEffect(() => {
+    if (!conversationId) return;
+
+    const loadMessages = async () => {
+      try {
+        const res = await fetch(`/api/conversations/${conversationId}/messages`);
+        if (res.ok) {
+          const data = await res.json();
+          setMessages(Array.isArray(data) ? data : []);
+        }
+      } catch (error) {
+        console.error("Erreur lors du chargement des messages:", error);
+      }
+    };
+
+    loadMessages();
+  }, [conversationId]);
+
+  // Setup socket connection (stabilisé: dépend seulement de conversationId et currentUser.id)
+  useEffect(() => {
+    if (!conversationId || !currentUser?.id) return;
+
+    const newSocket = io({
+      path: "/socket.io",
+      addTrailingSlash: false,
+      auth: { userId: currentUser.id },
+      transports: ["websocket", "polling"],
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 500,
+      timeout: 5000,
+    });
+
+    newSocket.on("connect", () => {
+      setIsConnected(true);
+      newSocket.emit("joinConversation", conversationId);
+      // Marquer comme lu immédiatement à l'ouverture du chat
+      newSocket.emit("markAsRead", { conversationId, userId: currentUser.id });
+    });
+
+    newSocket.on("disconnect", () => {
+      setIsConnected(false);
+    });
+
+    newSocket.on("newMessage", (message: Message) => {
+      if (message.conversationId === conversationId) {
+        setMessages(prev => prev.some(m => m.id === message.id) ? prev : [...prev, message]);
+
+        // Lecture son / notification via refs pour éviter les re-creations
+        if (soundRef.current && message.senderId !== currentUser.id) {
+          playNotificationSound();
+        }
+        if (notifyPermRef.current && message.senderId !== currentUser.id) {
+          showBrowserNotification(message);
+        }
+        if (onNewMessageRef.current && message.senderId !== currentUser.id) {
+          onNewMessageRef.current();
+        }
+      }
+    });
+
+    setSocket(newSocket);
+
+    return () => {
+      newSocket.close();
+    };
+  }, [conversationId, currentUser?.id]);
+
+  // Auto-scroll to bottom
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const playNotificationSound = () => {
+    if (audioRef.current) {
+      audioRef.current.play().catch(e => console.log("Erreur lecture son:", e));
+    }
+  };
+
+  const showBrowserNotification = (message: Message) => {
+    if ("Notification" in window && Notification.permission === "granted") {
+      new Notification("Nouveau message", {
+        body: `${message.senderId === currentUser.id ? 'Vous' : 'Admin'}: ${message.content}`,
+        icon: "/favicon.ico",
+        tag: "chat-message"
+      });
+    }
+  };
+
+  const sendMessage = async () => {
+    // Autoriser l'envoi même sans connexion socket (fallback HTTP)
+    if (!input.trim()) return;
+
+    try {
+      const res = await fetch(`/api/conversations/${conversationId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: input.trim(), senderId: currentUser.id }),
+      });
+
+      if (res.ok) {
+        const created = await res.json();
+        // Mise à jour optimiste: ajouter immédiatement le message, sans doublon
+        setMessages(prev => prev.some(m => m.id === created.id) ? prev : [...prev, created]);
+        setInput("");
+        setSendError(null);
+      } else {
+        try {
+          const err = await res.json();
+          setSendError(typeof err?.error === "string" ? err.error : "Échec de l'envoi du message");
+        } catch {
+          setSendError("Échec de l'envoi du message");
+        }
+      }
+    } catch (error) {
+      console.error("Erreur lors de l'envoi du message:", error);
+      setSendError("Erreur réseau lors de l'envoi du message");
+    }
+  };
+
+  const formatTime = (dateString: string) => {
+    return new Date(dateString).toLocaleTimeString('fr-FR', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-white rounded-2xl shadow-lg overflow-hidden">
+      {/* Audio element for notification sound */}
+      <audio ref={audioRef} src="/notification.mp3" preload="auto" />
+      
+      {/* Header */}
+      <div className="bg-gradient-to-r from-slate-800 to-gray-900 text-white p-4 flex items-center justify-between border-b border-gray-700">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+            <span className="text-white font-bold text-sm">{currentUser.name.charAt(0).toUpperCase()}</span>
+          </div>
+          <div>
+            <h3 className="font-semibold">Chat Support</h3>
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
+              <span className="text-sm text-gray-300">{isConnected ? 'En ligne' : 'Hors ligne'}</span>
+            </div>
+          </div>
+        </div>
+        
+        {/* Sound toggle */}
+        <button
+          onClick={() => setSoundEnabled(!soundEnabled)}
+          className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+          title={soundEnabled ? "Désactiver les sons" : "Activer les sons"}
+        >
+          {soundEnabled ? (
+            <Bell className="w-5 h-5" />
+          ) : (
+            <BellOff className="w-5 h-5" />
+          )}
+        </button>
+      </div>
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+        {messages.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Send className="w-8 h-8 text-gray-400" />
+            </div>
+            <p>Aucun message pour le moment</p>
+            <p className="text-sm">Commencez la conversation !</p>
+          </div>
+        ) : (
+          messages.map((message) => {
+            const isOwn = message.senderId === currentUser.id;
+            return (
+              <div key={message.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
+                  isOwn 
+                    ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white' 
+                    : 'bg-gray-100 text-gray-900'
+                }`}>
+                  <p className="text-sm">{message.content}</p>
+                  <p className={`text-xs mt-1 ${isOwn ? 'text-blue-100' : 'text-gray-500'}`}>
+                    {formatTime(message.createdAt)}
+                  </p>
+                </div>
+              </div>
+            );
+          })
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Input */}
+      <div className="border-t border-gray-200 p-4 bg-gray-50">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder="Tapez votre message..."
+            className="flex-1 px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+            // On n'empêche plus la saisie si le socket est hors ligne
+            disabled={false}
+          />
+          <button
+            onClick={sendMessage}
+            // Le bouton est désactivé uniquement si le champ est vide
+            disabled={!input.trim()}
+            className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
+          >
+            <Send className="w-4 h-4" />
+            <span className="hidden sm:inline">Envoyer</span>
+          </button>
+        </div>
+        {sendError && (
+          <p className="mt-2 text-sm text-red-600">{sendError}</p>
+        )}
+      </div>
+    </div>
+  );
+}
