@@ -17,3 +17,5 @@ services:
         sync: false
       - key: NPM_CONFIG_PRODUCTION
         value: "false"
+      - key: NODE_VERSION
+        value: "22.16.0"
