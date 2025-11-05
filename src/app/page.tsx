@@ -226,11 +226,34 @@ const App: React.FC = () => {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const openClientPortal = (client: Client) => {
+  const openClientPortal = async (client: Client) => {
     const portalUrl = `${window.location.origin}/portal/${client.uniqueId}`;
     console.log('🚀 Ouverture du portail pour:', client.name);
     console.log('📋 URL:', portalUrl);
     console.log('📊 Données du projet:', client.project);
+
+    // Upsert des données du portail côté serveur pour rendre le lien accessible sur tout appareil
+    try {
+      const res = await fetch('/api/portal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          uniqueId: client.uniqueId,
+          name: client.name,
+          contact: client.contact,
+          email: client.email,
+          progression: client.progression,
+          project: client.project,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        console.error('Échec de l’upsert du portail client:', err);
+      }
+    } catch (e) {
+      console.error('Erreur réseau lors de l’upsert du portail client:', e);
+    }
+
     window.open(portalUrl, '_blank', 'noopener,noreferrer');
   };
 

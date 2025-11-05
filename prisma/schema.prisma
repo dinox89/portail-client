@@ -42,3 +42,15 @@ model Message {
   sender         User         @relation("SentMessages", fields: [senderId], references: [id])
   senderId       String
 }
+
+// Persisted client portal data to make shared links work across devices
+model ClientPortal {
+  id          String   @id // Use the uniqueId generated for the client
+  name        String
+  contact     String
+  email       String
+  progression Int      @default(0)
+  project     Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
