@@ -60,7 +60,7 @@ export default function ClientPage() {
       setLoading(true);
       try {
         // Essayer d’abord de charger depuis l’API (persistance DB)
-        const res = await fetch(`/api/portal/${clientId}`);
+        const res = await fetch(`/api/portal/${clientId}`, { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
           setClient({
@@ -529,13 +529,8 @@ export default function ClientPage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          {getStatusIcon(file.status)}
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(file.status)}`}>
-                            {file.status === 'completed' ? 'Disponible' : 
-                             file.status === 'in-progress' ? 'En préparation' : 'Bientôt'}
-                          </span>
-                          {file.status === 'completed' && file.fileData && (
-                            <button 
+                          {file.fileData && (
+                            <button
                               onClick={() => downloadFile(file)}
                               className="p-2 text-purple-600 hover:bg-purple-100 rounded-lg transition-colors"
                               title="Télécharger le fichier PNG"

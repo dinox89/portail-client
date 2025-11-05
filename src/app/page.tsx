@@ -219,26 +219,33 @@ const App: React.FC = () => {
     return `${window.location.origin}/portal/${uniqueId}`;
   };
 
+  // Persister un client dans la base pour synchroniser le portail
+  const persistClientPortal = async (client: Client) => {
+    try {
+      await fetch('/api/portal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          uniqueId: client.uniqueId,
+          name: client.name,
+          contact: client.contact,
+          email: client.email,
+          progression: client.progression,
+          project: client.project,
+        }),
+      });
+    } catch (e) {
+      console.error('Erreur de persistance ClientPortal:', e);
+    }
+  };
+
   const copyPortalLink = async (uniqueId: string) => {
-    // Trouver le client et upsert côté serveur pour que le lien soit valide partout
-    const client = clients.find(c => c.uniqueId === uniqueId);
+    // Utiliser l’état d’édition si présent pour éviter des données obsolètes
+    const client = (editingProject && editingProject.uniqueId === uniqueId)
+      ? editingProject
+      : clients.find(c => c.uniqueId === uniqueId) || null;
     if (client) {
-      try {
-        await fetch('/api/portal', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            uniqueId: client.uniqueId,
-            name: client.name,
-            contact: client.contact,
-            email: client.email,
-            progression: client.progression,
-            project: client.project,
-          }),
-        });
-      } catch (e) {
-        console.error('Erreur upsert avant copie du lien:', e);
-      }
+      await persistClientPortal(client);
     }
 
     const link = getPortalLink(uniqueId);
@@ -360,6 +367,8 @@ const App: React.FC = () => {
         projectData: editingProject.project,
         progression: editingProject.progression
       });
+      // Persister immédiatement côté serveur pour synchroniser le portail
+      void persistClientPortal(editingProject);
       
       setTimeout(() => setShowSuccessMessage(false), 3000);
     }
@@ -374,40 +383,48 @@ const App: React.FC = () => {
 
   const handleProgressionChange = (value: string) => {
     if (editingProject) {
-      setEditingProject({ ...editingProject, progression: parseInt(value) });
+      const next = { ...editingProject, progression: parseInt(value) };
+      setEditingProject(next);
+      void persistClientPortal(next);
     }
   };
 
   const handleAddStep = () => {
     if (newStep.name && newStep.date && editingProject) {
       const step: Step = { id: Date.now(), ...newStep };
-      setEditingProject({
+      const updated = {
         ...editingProject,
         project: { ...editingProject.project, steps: [...editingProject.project.steps, step] }
-      });
+      };
+      setEditingProject(updated);
       setNewStep({ name: '', date: '', status: 'En cours' });
       setShowAddStepModal(false);
+      void persistClientPortal(updated);
     }
   };
 
   const handleDeleteStep = (stepId: number) => {
     if (editingProject) {
-      setEditingProject({
+      const updated = {
         ...editingProject,
         project: { ...editingProject.project, steps: editingProject.project.steps.filter(s => s.id !== stepId) }
-      });
+      };
+      setEditingProject(updated);
+      void persistClientPortal(updated);
     }
   };
 
   const handleUpdateStep = (stepId: number, field: keyof Step, value: string) => {
     if (editingProject) {
-      setEditingProject({
+      const updated = {
         ...editingProject,
         project: {
           ...editingProject.project,
           steps: editingProject.project.steps.map(s => s.id === stepId ? { ...s, [field]: value } : s)
         }
-      });
+      };
+      setEditingProject(updated);
+      void persistClientPortal(updated);
     }
   };
 
@@ -448,16 +465,18 @@ const App: React.FC = () => {
           fileType: uploadingFile.type
         };
         
-        setEditingProject({
+        const updated = {
           ...editingProject,
           project: { ...editingProject.project, files: [...(editingProject.project.files || []), file] }
-        });
+        };
+        setEditingProject(updated);
         
         setNewFile({ name: '', date: new Date().toISOString().split('T')[0], status: 'completed', size: '' });
         setUploadingFile(null);
         setShowAddFileModal(false);
         
         console.log('📤 Fichier PNG ajouté et stocké:', file);
+        void persistClientPortal(updated);
       } catch (error) {
         console.error('Erreur lors du traitement du fichier:', error);
         alert('Erreur lors du traitement du fichier');
@@ -476,22 +495,26 @@ const App: React.FC = () => {
 
   const handleDeleteFile = (fileId: number) => {
     if (editingProject) {
-      setEditingProject({
+      const updated = {
         ...editingProject,
         project: { ...editingProject.project, files: editingProject.project.files.filter(f => f.id !== fileId) }
-      });
+      };
+      setEditingProject(updated);
+      void persistClientPortal(updated);
     }
   };
 
   const handleUpdateFile = (fileId: number, field: keyof ProjectFile, value: string) => {
     if (editingProject) {
-      setEditingProject({
+      const updated = {
         ...editingProject,
         project: {
           ...editingProject.project,
           files: editingProject.project.files.map(f => f.id === fileId ? { ...f, [field]: value } : f)
         }
-      });
+      };
+      setEditingProject(updated);
+      void persistClientPortal(updated);
     }
   };
 
