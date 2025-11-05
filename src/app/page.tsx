@@ -219,9 +219,30 @@ const App: React.FC = () => {
     return `${window.location.origin}/portal/${uniqueId}`;
   };
 
-  const copyPortalLink = (uniqueId: string) => {
+  const copyPortalLink = async (uniqueId: string) => {
+    // Trouver le client et upsert côté serveur pour que le lien soit valide partout
+    const client = clients.find(c => c.uniqueId === uniqueId);
+    if (client) {
+      try {
+        await fetch('/api/portal', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            uniqueId: client.uniqueId,
+            name: client.name,
+            contact: client.contact,
+            email: client.email,
+            progression: client.progression,
+            project: client.project,
+          }),
+        });
+      } catch (e) {
+        console.error('Erreur upsert avant copie du lien:', e);
+      }
+    }
+
     const link = getPortalLink(uniqueId);
-    navigator.clipboard.writeText(link);
+    await navigator.clipboard.writeText(link);
     setCopiedId(uniqueId);
     setTimeout(() => setCopiedId(null), 2000);
   };
