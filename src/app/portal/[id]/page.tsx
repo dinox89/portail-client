@@ -414,7 +414,7 @@ export default function ClientPage() {
                     </span>
                     
                     {chatUnread > 0 && (
-                      <span className="absolute -top-1 -right-1 min-w-[18px] h-5 px-1.5 bg-purple-600 text-white text-[10px] leading-5 rounded-full border border-white flex items-center justify-center">
+                      <span className="absolute -top-1 -right-1 min-w-[18px] h-5 px-1.5 bg-red-600 text-white text-[10px] leading-5 rounded-full border border-white flex items-center justify-center">
                         {chatUnread}
                       </span>
                     )}
@@ -604,7 +604,6 @@ export default function ClientPage() {
                     createdAt: new Date(), 
                     updatedAt: new Date() 
                   }} 
-                  onNewMessage={handleNewMessage}
                 />
               </div>
             )}

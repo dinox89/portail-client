@@ -47,6 +47,40 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
   const onNewMessageRef = useRef<(() => void) | undefined>(onNewMessage);
   useEffect(() => { onNewMessageRef.current = onNewMessage; }, [onNewMessage]);
 
+  const dedupeMessages = (list: Message[]) => {
+    const seen = new Set<string>();
+    const result: Message[] = [];
+    for (const m of list) {
+      if (!seen.has(m.id)) {
+        seen.add(m.id);
+        result.push(m);
+      }
+    }
+    return result;
+  };
+
+  const renderMessageContent = (content: string) => {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const isUrl = (text: string) => /^https?:\/\/[^\s]+$/.test(text);
+    const parts = content.split(urlRegex);
+    return parts.map((part, index) => {
+      if (isUrl(part)) {
+        return (
+          <a
+            key={index}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline text-blue-100 hover:text-white break-all"
+          >
+            {part}
+          </a>
+        );
+      }
+      return <span key={index}>{part}</span>;
+    });
+  };
+
   // Request notification permission on mount
   useEffect(() => {
     if ("Notification" in window && Notification.permission === "default") {
@@ -67,7 +101,8 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
         const res = await fetch(`/api/conversations/${conversationId}/messages`);
         if (res.ok) {
           const data = await res.json();
-          setMessages(Array.isArray(data) ? data : []);
+          const initial = Array.isArray(data) ? data : [];
+          setMessages(dedupeMessages(initial));
         }
       } catch (error) {
         console.error("Erreur lors du chargement des messages:", error);
@@ -161,7 +196,6 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
 
       if (res.ok) {
         const created = await res.json();
-        // Mise à jour optimiste: ajouter immédiatement le message, sans doublon
         setMessages(prev => prev.some(m => m.id === created.id) ? prev : [...prev, created]);
         setInput("");
         setSendError(null);
@@ -247,7 +281,9 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
                     ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white' 
                     : 'bg-gray-100 text-gray-900'
                 }`}>
-                  <p className="text-sm">{message.content}</p>
+                  <p className="text-sm whitespace-pre-wrap break-words">
+                    {renderMessageContent(message.content)}
+                  </p>
                   <p className={`text-xs mt-1 ${isOwn ? 'text-blue-100' : 'text-gray-500'}`}>
                     {formatTime(message.createdAt)}
                   </p>
@@ -262,15 +298,12 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
       {/* Input */}
       <div className="border-t border-gray-200 p-4 bg-gray-50">
         <div className="flex gap-2">
-          <input
-            type="text"
+          <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
             placeholder="Tapez votre message..."
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-            // On n'empêche plus la saisie si le socket est hors ligne
-            disabled={false}
+            className="flex-1 px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white resize-none h-10 max-h-32"
           />
           <button
             onClick={sendMessage}

@@ -36,6 +36,28 @@ export default function AdminMessaging() {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [notifications, setNotifications] = useState<Message[]>([]);
 
+  const renderMessageContent = (content: string) => {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const isUrl = (text: string) => /^https?:\/\/[^\s]+$/.test(text);
+    const parts = content.split(urlRegex);
+    return parts.map((part, index) => {
+      if (isUrl(part)) {
+        return (
+          <a
+            key={index}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline text-blue-600 hover:text-blue-800 break-all"
+          >
+            {part}
+          </a>
+        );
+      }
+      return <span key={index}>{part}</span>;
+    });
+  };
+
   useEffect(() => {
     // Initialiser la connexion Socket.IO (admin)
     const newSocket = io({
@@ -91,7 +113,16 @@ export default function AdminMessaging() {
       const res = await fetch(`/api/conversations/${conversationId}/messages`);
       if (res.ok) {
         const data = await res.json();
-        return Array.isArray(data) ? data : [];
+        if (!Array.isArray(data)) return [];
+        const seen = new Set<string>();
+        const unique: Message[] = [];
+        for (const m of data) {
+          if (!seen.has(m.id)) {
+            seen.add(m.id);
+            unique.push(m);
+          }
+        }
+        return unique;
       }
     } catch (error) {
       console.error('Erreur lors du chargement des messages de la conversation:', error);
@@ -125,6 +156,11 @@ export default function AdminMessaging() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: ADMIN_USER_ID })
       });
+      setConversations(prev =>
+        prev.map(conv =>
+          conv.id === conversationId ? { ...conv, unreadCount: 0 } : conv
+        )
+      );
     } catch (error) {
       console.error('Erreur lors du marquage des messages comme lus:', error);
     }
@@ -194,14 +230,14 @@ export default function AdminMessaging() {
                   </span>
                 </div>
                 {conversation.unreadCount > 0 && (
-                  <span className="bg-purple-500 text-white text-xs rounded-full px-2 py-1">
+                  <span className="bg-red-500 text-white text-xs rounded-full px-2 py-1">
                     {conversation.unreadCount}
                   </span>
                 )}
               </div>
               {conversation.lastMessage && (
-                <div className="mt-2 text-sm text-gray-600 truncate">
-                  {conversation.lastMessage.content}
+                <div className="mt-2 text-sm text-gray-600 truncate whitespace-pre-wrap">
+                  {renderMessageContent(conversation.lastMessage.content)}
                 </div>
               )}
             </div>
@@ -236,7 +272,9 @@ export default function AdminMessaging() {
                         : 'bg-gray-200 text-gray-800'
                     }`}
                   >
-                    <p className="text-sm">{message.content}</p>
+                    <p className="text-sm whitespace-pre-wrap break-words">
+                      {renderMessageContent(message.content)}
+                    </p>
                     <div className="flex items-center mt-1 text-xs opacity-70">
                       <Clock className="mr-1" size={12} />
                       {new Date(message.createdAt).toLocaleTimeString()}
