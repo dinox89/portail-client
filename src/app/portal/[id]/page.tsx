@@ -54,12 +54,10 @@ export default function ClientPage() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
 
-  // Charger les données du client (API avec fallback localStorage)
   useEffect(() => {
     const loadClientData = async () => {
       setLoading(true);
       try {
-        // Essayer d’abord de charger depuis l’API (persistance DB)
         const res = await fetch(`/api/portal/${clientId}`, { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
@@ -74,27 +72,31 @@ export default function ClientPage() {
           });
           setError(false);
         } else {
-          // Fallback: localStorage pour compatibilité
-          const savedData = localStorage.getItem('clientData');
-          if (savedData) {
-            const clients: Client[] = JSON.parse(savedData);
-            const foundClient = clients.find(c => c.uniqueId === clientId);
-            if (foundClient) {
-              setClient(foundClient);
-              setError(false);
-            } else {
-              setError(true);
+          const fallbackLoaded = (() => {
+            const savedData = localStorage.getItem('clientData');
+            if (!savedData) return false;
+            try {
+              const clients: Client[] = JSON.parse(savedData);
+              const foundClient = clients.find(c => c.uniqueId === clientId);
+              if (foundClient) {
+                setClient(foundClient);
+                setError(false);
+                return true;
+              }
+            } catch {
+              return false;
             }
-          } else {
+            return false;
+          })();
+          if (!fallbackLoaded) {
             setError(true);
           }
         }
       } catch (error) {
         console.error('Erreur lors du chargement des données client:', error);
-        // Dernier recours: localStorage
-        try {
-          const savedData = localStorage.getItem('clientData');
-          if (savedData) {
+        const savedData = localStorage.getItem('clientData');
+        if (savedData) {
+          try {
             const clients: Client[] = JSON.parse(savedData);
             const foundClient = clients.find(c => c.uniqueId === clientId);
             if (foundClient) {
@@ -103,10 +105,10 @@ export default function ClientPage() {
             } else {
               setError(true);
             }
-          } else {
+          } catch {
             setError(true);
           }
-        } catch (e) {
+        } else {
           setError(true);
         }
       } finally {

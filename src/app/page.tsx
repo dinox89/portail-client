@@ -56,27 +56,7 @@ const App: React.FC = () => {
   const [password, setPassword] = useState('');
   const [showPasswordError, setShowPasswordError] = useState(false);
   
-  const [clients, setClients] = useState<Client[]>([
-    {
-      id: 1,
-      uniqueId: 'client-demo-001',
-      name: 'Demo Client',
-      contact: 'John Doe',
-      email: 'john@example.com',
-      progression: 10,
-      project: {
-        name: 'Landing Page',
-        description: 'Votre projet est en cours de réalisation',
-        startDate: '2025-10-25',
-        endDate: '2025-11-09',
-        status: 'En production',
-        steps: [
-          { id: 1, name: 'Démarrage et échanges', date: '1 Nov', status: 'Terminé' }
-        ],
-        files: []
-      }
-    }
-  ]);
+  const [clients, setClients] = useState<Client[]>([]);
   
   const [showNewClientModal, setShowNewClientModal] = useState(false);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
@@ -288,6 +268,7 @@ const App: React.FC = () => {
 
   const openChatModal = async (client: Client) => {
     setSelectedChatClient(client);
+    setShowChatModal(true);
     try {
       const res = await fetch('/api/conversations', {
         method: 'POST',
@@ -304,12 +285,9 @@ const App: React.FC = () => {
       const data = await res.json();
       setConversationId(data.id);
       setConversationClientMap(prev => ({ ...prev, [data.id]: client.uniqueId }));
-      // Rejoindre la conversation et marquer comme lu côté socket
       socketRef.current?.emit('joinConversation', data.id);
       socketRef.current?.emit('markAsRead', { conversationId: data.id, userId: 'admin-user-id' });
-      // Réinitialiser le compteur local pour ce client
       setUnreadByClient(prev => ({ ...prev, [client.uniqueId]: 0 }));
-      setShowChatModal(true);
     } catch (error) {
       console.error('Error fetching conversation:', error);
     }
@@ -1288,7 +1266,7 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {showChatModal && selectedChatClient && conversationId && (
+        {showChatModal && selectedChatClient && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[80vh]">
               <div className="flex justify-between items-center mb-4">
@@ -1301,17 +1279,23 @@ const App: React.FC = () => {
                 </button>
               </div>
               <div className="h-96 overflow-y-auto border rounded-lg p-4 mb-4">
-                <Chat 
-                  conversationId={conversationId} 
-                  currentUser={{
-                    id: 'admin-user-id',
-                    email: 'admin@example.com',
-                    name: 'Admin',
-                    role: 'admin',
-                    createdAt: new Date(),
-                    updatedAt: new Date(),
-                  }}
-                />
+                {conversationId ? (
+                  <Chat 
+                    conversationId={conversationId} 
+                    currentUser={{
+                      id: 'admin-user-id',
+                      email: 'admin@example.com',
+                      name: 'Admin',
+                      role: 'admin',
+                      createdAt: new Date(),
+                      updatedAt: new Date(),
+                    }}
+                  />
+                ) : (
+                  <div className="h-full flex items-center justify-center text-gray-500">
+                    Chargement de la conversation...
+                  </div>
+                )}
               </div>
             </div>
           </div>
