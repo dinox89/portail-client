@@ -38,6 +38,7 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
   const [sendError, setSendError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Refs pour éviter de recréer la connexion socket quand ces valeurs changent
   const soundRef = useRef<boolean>(soundEnabled);
@@ -167,6 +168,15 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  useEffect(() => {
+    if (!inputRef.current) return;
+    const el = inputRef.current;
+    el.style.height = "auto";
+    const maxHeight = 160;
+    const next = Math.min(el.scrollHeight, maxHeight);
+    el.style.height = `${next}px`;
+  }, [input]);
+
   const playNotificationSound = () => {
     if (audioRef.current) {
       audioRef.current.play().catch(e => console.log("Erreur lecture son:", e));
@@ -292,10 +302,11 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
       <div className="border-t border-gray-200 p-4 bg-gray-50">
         <div className="flex gap-2">
           <textarea
+            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Tapez votre message..."
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white resize-none h-10 max-h-32"
+            className="flex-1 px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white resize-none min-h-[44px] max-h-40"
           />
           <button
             onClick={sendMessage}

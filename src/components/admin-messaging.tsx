@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { MessageCircle, Send, User, Clock, CheckCircle } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 
@@ -35,6 +35,7 @@ export default function AdminMessaging() {
   const [newMessage, setNewMessage] = useState('');
   const [socket, setSocket] = useState<Socket | null>(null);
   const [notifications, setNotifications] = useState<Message[]>([]);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const renderMessageContent = (content: string) => {
     const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -57,6 +58,15 @@ export default function AdminMessaging() {
       return <span key={index}>{part}</span>;
     });
   };
+
+  useEffect(() => {
+    if (!inputRef.current) return;
+    const el = inputRef.current;
+    el.style.height = "auto";
+    const maxHeight = 160;
+    const next = Math.min(el.scrollHeight, maxHeight);
+    el.style.height = `${next}px`;
+  }, [newMessage]);
 
   useEffect(() => {
     // Initialiser la connexion Socket.IO (admin)
@@ -290,13 +300,12 @@ export default function AdminMessaging() {
             {/* Zone d'envoi */}
             <div className="p-4 border-t border-gray-200 bg-white">
               <div className="flex space-x-2">
-                <input
-                  type="text"
+                <textarea
+                  ref={inputRef}
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
                   placeholder="Tapez votre message..."
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none min-h-[44px] max-h-40"
                 />
                 <button
                   onClick={sendMessage}
