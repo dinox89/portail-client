@@ -10,7 +10,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: 'ID manquant' }, { status: 400 });
     }
 
-    const client = await db.clientPortal.findUnique({ where: { id } });
+    const client = await (db as any).clientPortal.findUnique({ where: { id } });
     if (!client) {
       return NextResponse.json({ error: 'Client non trouvé' }, { status: 404 });
     }

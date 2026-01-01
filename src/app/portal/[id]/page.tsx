@@ -176,6 +176,30 @@ export default function ClientPage() {
     setUnreadCount((prev) => prev + 1);
   };
 
+  // Mise à jour en temps réel du portail
+  const handlePortalUpdate = (updated: any) => {
+    try {
+      setClient((prev) => {
+        const base = {
+          id: prev?.id ?? 0,
+          uniqueId: clientId,
+        } as Client;
+        return {
+          ...base,
+          name: updated?.name ?? prev?.name ?? '',
+          contact: updated?.contact ?? prev?.contact ?? '',
+          email: updated?.email ?? prev?.email ?? '',
+          progression: (updated?.progression ?? prev?.progression ?? 0) as number,
+          project: (updated?.project ?? prev?.project ?? {
+            name: '', description: '', startDate: '', endDate: '', status: '', steps: [], files: []
+          }) as Project,
+        };
+      });
+    } catch (err) {
+      console.warn('Erreur lors de la mise à jour du portail:', err);
+    }
+  };
+
   const downloadFile = (file: ProjectFile) => {
     if (file.fileData) {
       try {
@@ -591,6 +615,7 @@ export default function ClientPage() {
         clientId={clientId}
         conversationId={conversationId}
         onNewMessage={activeTab !== 'chat' ? handleNewMessage : undefined}
+        onPortalUpdate={handlePortalUpdate}
       />
     </>
   );

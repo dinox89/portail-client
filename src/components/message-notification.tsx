@@ -13,7 +13,7 @@ interface NotificationMessage {
   createdAt: string;
 }
 
-interface MessageNotificationProps {
+interface MessageNotificationProps {        
   userId?: string;
   onNewMessageCount?: (count: number) => void;
 }

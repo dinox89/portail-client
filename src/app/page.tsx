@@ -112,10 +112,11 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Sauvegarder automatiquement les données à chaque modification
   useEffect(() => {
     if (clients.length > 0) {
       localStorage.setItem('clientData', JSON.stringify(clients));
+    } else {
+      localStorage.removeItem('clientData');
     }
   }, [clients]);
 
@@ -348,11 +349,23 @@ const App: React.FC = () => {
     }
   };
 
-  const handleDeleteClient = (id: number) => {
+  const handleDeleteClient = async (id: number) => {
+    const clientToDelete = clients.find(c => c.id === id) || null;
     setClients(clients.filter(c => c.id !== id));
     if (selectedClient?.id === id) {
       setSelectedClient(null);
       setEditingProject(null);
+    }
+    if (clientToDelete) {
+      try {
+        await fetch('/api/portal', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uniqueId: clientToDelete.uniqueId }),
+        });
+      } catch (e) {
+        console.error('Erreur de suppression client côté serveur:', e);
+      }
     }
   };
 

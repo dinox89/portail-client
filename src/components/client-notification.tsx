@@ -7,13 +7,16 @@ interface ClientNotificationProps {
   clientId: string;
   conversationId?: string | null;
   onNewMessage?: () => void;
+  onPortalUpdate?: (client: any) => void;
 }
 
 // Composant headless: aucune UI, uniquement la logique socket
-export function ClientNotification({ clientId, conversationId, onNewMessage }: ClientNotificationProps) {
+export function ClientNotification({ clientId, conversationId, onNewMessage, onPortalUpdate }: ClientNotificationProps) {
   const [socket, setSocket] = useState<Socket | null>(null);
   const onNewMessageRef = useRef<(() => void) | undefined>(onNewMessage);
   useEffect(() => { onNewMessageRef.current = onNewMessage; }, [onNewMessage]);
+  const onPortalUpdateRef = useRef<((client: any) => void) | undefined>(onPortalUpdate);
+  useEffect(() => { onPortalUpdateRef.current = onPortalUpdate; }, [onPortalUpdate]);
 
   useEffect(() => {
     const newSocket = io({
@@ -57,6 +60,17 @@ export function ClientNotification({ clientId, conversationId, onNewMessage }: C
       const isSameConv = conversationId ? message?.conversationId === conversationId : true;
       if (isFromOther && isSameConv) {
         onNewMessageRef.current?.();
+      }
+    });
+
+    // Mises à jour du portail (projet, étapes, fichiers, progression)
+    newSocket.on("portalUpdate", (payload: any) => {
+      try {
+        if (payload?.userId === clientId) {
+          onPortalUpdateRef.current?.(payload.client);
+        }
+      } catch (err) {
+        console.warn("ClientNotification: erreur traitement portalUpdate", err);
       }
     });
 

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { getIO } from '@/lib/socket';
 
-// Upsert client portal data
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'uniqueId, name, contact, email, project requis' }, { status: 400 });
     }
 
-    const client = await db.clientPortal.upsert({
+    const client = await (db as any).clientPortal.upsert({
       where: { id: uniqueId },
       update: {
         name,
@@ -37,9 +37,81 @@ export async function POST(request: Request) {
       },
     });
 
+    try {
+      const io = getIO();
+      if (io) {
+        io.emit('portalUpdate', { userId: uniqueId, client });
+      }
+    } catch (emitErr) {
+      console.warn('Emission portalUpdate échouée:', emitErr);
+    }
+
     return NextResponse.json(client);
   } catch (error) {
     console.error('Erreur upsert client portal:', error);
+    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const body = await request.json().catch(() => null);
+    const uniqueId = body?.uniqueId as string | undefined;
+
+    if (!uniqueId) {
+      return NextResponse.json({ error: 'uniqueId requis' }, { status: 400 });
+    }
+
+    const prisma = db as any;
+
+    const conversations = await prisma.conversation.findMany({
+      where: {
+        users: {
+          some: {
+            id: uniqueId,
+          },
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    const conversationIds = conversations.map((c: { id: string }) => c.id);
+
+    if (conversationIds.length > 0) {
+      await prisma.message.deleteMany({
+        where: {
+          conversationId: {
+            in: conversationIds,
+          },
+        },
+      });
+
+      await prisma.conversation.deleteMany({
+        where: {
+          id: {
+            in: conversationIds,
+          },
+        },
+      });
+    }
+
+    await prisma.user.deleteMany({
+      where: {
+        id: uniqueId,
+      },
+    });
+
+    await prisma.clientPortal.deleteMany({
+      where: {
+        id: uniqueId,
+      },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Erreur suppression client portal:', error);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
   }
 }
