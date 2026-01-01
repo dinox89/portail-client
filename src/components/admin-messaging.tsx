@@ -48,7 +48,7 @@ export default function AdminMessaging() {
             href={part}
             target="_blank"
             rel="noopener noreferrer"
-            className="underline text-blue-600 hover:text-blue-800 break-all"
+            className="underline text-black hover:text-black break-all"
           >
             {part}
           </a>

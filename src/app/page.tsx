@@ -5,6 +5,7 @@ import { Users, Plus, Search, Edit2, Trash2, X, Save, Building2, ExternalLink, C
 import Chat from "@/components/chat";
 import AdminMessaging from '@/components/admin-messaging';
 import { io } from 'socket.io-client';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 interface Step {
   id: number;
@@ -327,23 +328,24 @@ const App: React.FC = () => {
     }
   };
 
-  const handleDeleteClient = async (id: number) => {
-    const clientToDelete = clients.find(c => c.id === id) || null;
-    setClients(clients.filter(c => c.id !== id));
+  const handleDeleteClient = async (client: Client) => {
+    const id = client.id;
+    const clientUniqueId = client.uniqueId;
+
+    setClients(prev => prev.filter(c => c.id !== id));
     if (selectedClient?.id === id) {
       setSelectedClient(null);
       setEditingProject(null);
     }
-    if (clientToDelete) {
-      try {
-        await fetch('/api/portal', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ uniqueId: clientToDelete.uniqueId }),
-        });
-      } catch (e) {
-        console.error('Erreur de suppression client côté serveur:', e);
-      }
+
+    try {
+      await fetch('/api/portal', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uniqueId: clientUniqueId }),
+      });
+    } catch (e) {
+      console.error('Erreur de suppression client côté serveur:', e);
     }
   };
 
@@ -1162,13 +1164,30 @@ const App: React.FC = () => {
                       </span>
                     )}
                   </button>
-                  <button
-                    onClick={() => handleDeleteClient(client.id)}
-                    className="text-red-500 hover:text-red-700"
-                    title="Supprimer le client"
-                  >
-                    <Trash2 size={20} />
-                  </button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <button
+                        className="text-red-500 hover:text-red-700"
+                        title="Supprimer le client"
+                      >
+                        <Trash2 size={20} />
+                      </button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Supprimer ce client ?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Êtes-vous sûr de vouloir supprimer cette fiche client ? Cette action est définitive.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Annuler</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => handleDeleteClient(client)}>
+                          Supprimer
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               </div>
 

@@ -151,28 +151,37 @@ export class SocketManager {
         try {
           const { conversationId, userId: readerId } = data;
 
-          // Marquer les messages non lus comme lus
           const updatedMessages = await db.message.updateMany({
             where: {
               conversationId,
               senderId: {
-                not: readerId, // Ne pas marquer ses propres messages comme lus
+                not: readerId,
               },
               read: false,
             },
             data: { read: true },
           });
 
-          // Notifier que les messages ont été lus
           this.io.to(conversationId).emit("messagesRead", {
             conversationId,
             userId: readerId,
             count: updatedMessages.count,
           });
 
-          // Mettre à jour le compteur de messages non lus pour les admins
           if (updatedMessages.count > 0) {
-            await this.notifyAdminOfUnreadMessages(readerId);
+            const conversation = await db.conversation.findUnique({
+              where: { id: conversationId },
+              include: {
+                users: { select: { id: true, role: true } },
+              },
+            });
+
+            if (conversation) {
+              const admins = conversation.users.filter(u => u.role === "admin");
+              for (const admin of admins) {
+                await this.notifyAdminOfUnreadMessages(admin.id);
+              }
+            }
           }
 
         } catch (error) {

@@ -71,7 +71,7 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
             href={part}
             target="_blank"
             rel="noopener noreferrer"
-            className="underline text-blue-100 hover:text-white break-all"
+            className="underline text-black hover:text-black break-all"
           >
             {part}
           </a>
@@ -220,13 +220,6 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
     });
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
-  };
-
   return (
     <div className="flex flex-col h-full bg-white rounded-2xl shadow-lg overflow-hidden">
       {/* Audio element for notification sound */}
@@ -301,7 +294,6 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyPress={handleKeyPress}
             placeholder="Tapez votre message..."
             className="flex-1 px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white resize-none h-10 max-h-32"
           />
