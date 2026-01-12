@@ -183,6 +183,14 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
   }, [messages]);
 
   useEffect(() => {
+    if (!conversationId) return;
+    const t = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+    }, 80);
+    return () => clearTimeout(t);
+  }, [conversationId, isConnected]);
+
+  useEffect(() => {
     if (!inputRef.current) return;
     const el = inputRef.current;
     el.style.height = "auto";

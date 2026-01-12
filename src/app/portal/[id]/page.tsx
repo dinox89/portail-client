@@ -179,8 +179,12 @@ export default function ClientPage() {
   };
 
   const handleNewMessage = () => {
-    setUnreadCount((prev) => prev + 1);
-    if (typeof document !== 'undefined' && document.hidden) {
+    const isHidden = typeof document !== 'undefined' && document.hidden;
+    const shouldCount = isHidden || activeTab !== 'chat';
+    if (shouldCount) {
+      setUnreadCount((prev) => prev + 1);
+    }
+    if (isHidden) {
       if (!defaultTitleRef.current) defaultTitleRef.current = document.title;
       document.title = 'Nouveau message !';
     }
@@ -633,7 +637,8 @@ export default function ClientPage() {
                     role: 'user', 
                     createdAt: new Date(), 
                     updatedAt: new Date() 
-                  }} 
+                  }}
+                  onNewMessage={handleNewMessage}
                 />
               </div>
             )}
@@ -645,7 +650,7 @@ export default function ClientPage() {
       <ClientNotification 
         clientId={clientId}
         conversationId={conversationId}
-        onNewMessage={activeTab !== 'chat' ? handleNewMessage : undefined}
+        onNewMessage={handleNewMessage}
         onPortalUpdate={handlePortalUpdate}
       />
     </>
