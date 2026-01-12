@@ -36,6 +36,8 @@ export default function AdminMessaging() {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [notifications, setNotifications] = useState<Message[]>([]);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const pollRef = useRef<number | null>(null);
 
   const renderMessageContent = (content: string) => {
     const regex = /((?:https?:\/\/|www\.)[^\s]+|(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?:\/[^\s]*)?)/g;
@@ -154,6 +156,21 @@ export default function AdminMessaging() {
     return [];
   };
 
+  useEffect(() => {
+    if (pollRef.current) window.clearInterval(pollRef.current);
+    pollRef.current = window.setInterval(async () => {
+      await fetchConversations();
+      if (selectedConversation?.id) {
+        const msgs = await loadConversationMessages(selectedConversation.id);
+        setSelectedConversation(prev => prev ? { ...prev, messages: msgs } : prev);
+      }
+    }, 10000);
+    return () => {
+      if (pollRef.current) window.clearInterval(pollRef.current);
+      pollRef.current = null;
+    };
+  }, [selectedConversation?.id]);
+
   const selectConversation = async (conversation: Conversation) => {
     // Quitter l'ancienne room si nécessaire
     if (socket && selectedConversation?.id) {
@@ -215,8 +232,18 @@ export default function AdminMessaging() {
           return { ...prev, messages: nextMsgs };
         });
         setNewMessage('');
+        setSendError(null);
+      } else {
+        let errMsg = 'Échec de l’envoi du message';
+        try {
+          const payload = await res.json();
+          if (typeof payload?.error === 'string') errMsg = payload.error;
+        } catch {}
+        setSendError(errMsg);
+        console.error('Erreur lors de l’envoi du message:', errMsg);
       }
     } catch (error) {
+      setSendError('Erreur réseau lors de l’envoi du message');
       console.error('Erreur lors de l\'envoi du message:', error);
     }
   };
@@ -329,6 +356,9 @@ export default function AdminMessaging() {
                   <Send size={16} />
                 </button>
               </div>
+              {sendError && (
+                <div className="mt-2 text-sm text-red-600">{sendError}</div>
+              )}
             </div>
           </>
         ) : (

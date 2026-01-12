@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { MessageCircle } from 'lucide-react';
 import { io } from 'socket.io-client';
 
@@ -40,6 +40,7 @@ export default function MessageNotification({ userId = 'admin-user-id', onNewMes
   const [notifications, setNotifications] = useState<NotificationMessage[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const prevTotalRef = useRef<number>(0);
 
   useEffect(() => {
     const socket = io({
@@ -78,6 +79,39 @@ export default function MessageNotification({ userId = 'admin-user-id', onNewMes
     return () => {
       socket.close();
     };
+  }, [ADMIN_USER_ID, onNewMessageCount]);
+
+  useEffect(() => {
+    const t = window.setInterval(async () => {
+      try {
+        const res = await fetch('/api/conversations/admin');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!Array.isArray(data)) return;
+        const total = data.reduce((acc: number, conv: any) => acc + (conv.unreadCount || 0), 0);
+        setUnreadCount(total);
+        onNewMessageCount?.(total);
+        if (total > prevTotalRef.current) {
+          prevTotalRef.current = total;
+          const latest = data.find((c: any) => c.lastMessage && c.unreadCount > 0)?.lastMessage;
+          if (latest) {
+            const notif: NotificationMessage = {
+              id: latest.id,
+              content: latest.content,
+              senderId: latest.senderId,
+              conversationId: latest.conversationId,
+              senderName: 'Client',
+              createdAt: latest.createdAt,
+            };
+            setNotifications(prev => [notif, ...prev]);
+            showToast(notif);
+          }
+        } else {
+          prevTotalRef.current = total;
+        }
+      } catch {}
+    }, 10000);
+    return () => window.clearInterval(t);
   }, [ADMIN_USER_ID, onNewMessageCount]);
 
   const showToast = (message: NotificationMessage) => {

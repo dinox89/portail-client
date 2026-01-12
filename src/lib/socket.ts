@@ -146,6 +146,20 @@ export class SocketManager {
         }
       });
 
+      socket.on("typing", (data: { conversationId: string }) => {
+        const { conversationId } = data || {};
+        if (conversationId) {
+          this.io.to(conversationId).emit("typing", { conversationId, userId, isTyping: true });
+        }
+      });
+
+      socket.on("stopTyping", (data: { conversationId: string }) => {
+        const { conversationId } = data || {};
+        if (conversationId) {
+          this.io.to(conversationId).emit("typing", { conversationId, userId, isTyping: false });
+        }
+      });
+
       // Marquer les messages comme lus
       socket.on("markAsRead", async (data: { conversationId: string; userId: string }) => {
         try {

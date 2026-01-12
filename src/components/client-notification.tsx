@@ -90,5 +90,45 @@ export function ClientNotification({ clientId, conversationId, onNewMessage, onP
     }
   }, [socket, conversationId]);
 
+  const lastSeenMapRef = useRef<Record<string, number>>({});
+  useEffect(() => {
+    const t = window.setInterval(async () => {
+      try {
+        if (conversationId) {
+          const res = await fetch(`/api/conversations/${conversationId}/messages`);
+          if (!res.ok) return;
+          const data = await res.json();
+          if (!Array.isArray(data)) return;
+          const last = data[data.length - 1];
+          if (last && last.senderId !== clientId) {
+            const ts = new Date(last.createdAt).getTime();
+            const prev = lastSeenMapRef.current[conversationId] || 0;
+            if (ts > prev) {
+              lastSeenMapRef.current[conversationId] = ts;
+              onNewMessageRef.current?.();
+            }
+          }
+        } else {
+          const res = await fetch(`/api/conversations/user/${clientId}`);
+          if (!res.ok) return;
+          const convs = await res.json();
+          if (!Array.isArray(convs)) return;
+          for (const c of convs) {
+            const last = Array.isArray(c.messages) ? c.messages[0] : null;
+            if (last && last.senderId !== clientId) {
+              const ts = new Date(last.createdAt).getTime();
+              const prev = lastSeenMapRef.current[c.id] || 0;
+              if (ts > prev) {
+                lastSeenMapRef.current[c.id] = ts;
+                onNewMessageRef.current?.();
+              }
+            }
+          }
+        }
+      } catch {}
+    }, 10000);
+    return () => window.clearInterval(t);
+  }, [clientId, conversationId]);
+
   return null;
 }

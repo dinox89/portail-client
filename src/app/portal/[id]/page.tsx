@@ -196,6 +196,20 @@ export default function ClientPage() {
     }
   }, []);
 
+  const prevUnreadRef = useRef<number>(0);
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const base = defaultTitleRef.current || document.title;
+    if (activeTab !== 'chat' && unreadCount > 0 && !document.hidden) {
+      const prefix = `(${unreadCount}) `;
+      const withoutPrefix = base.replace(/^\(\d+\)\s*/, '');
+      document.title = prefix + withoutPrefix;
+    } else if (!document.hidden) {
+      document.title = defaultTitleRef.current || document.title;
+    }
+    prevUnreadRef.current = unreadCount;
+  }, [unreadCount, activeTab]);
+
   useEffect(() => {
     const onVisibility = () => {
       if (typeof document !== 'undefined' && !document.hidden) {

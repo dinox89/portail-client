@@ -34,6 +34,7 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
   const [input, setInput] = useState("");
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [partnerTyping, setPartnerTyping] = useState(false);
   const [hasNotificationPermission, setHasNotificationPermission] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -48,6 +49,9 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
   useEffect(() => { notifyPermRef.current = hasNotificationPermission; }, [hasNotificationPermission]);
   const onNewMessageRef = useRef<(() => void) | undefined>(onNewMessage);
   useEffect(() => { onNewMessageRef.current = onNewMessage; }, [onNewMessage]);
+  const typingTimeoutRef = useRef<number | null>(null);
+  const typingActiveRef = useRef<boolean>(false);
+  const prevIdsRef = useRef<Set<string>>(new Set());
 
   const dedupeMessages = (list: Message[]) => {
     const seen = new Set<string>();
@@ -119,6 +123,7 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
           const data = await res.json();
           const initial = Array.isArray(data) ? data : [];
           setMessages(dedupeMessages(initial));
+          prevIdsRef.current = new Set(initial.map((m: any) => m.id));
         }
       } catch (error) {
         console.error("Erreur lors du chargement des messages:", error);
@@ -170,12 +175,54 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
         }
       }
     });
+    newSocket.on("typing", (payload: { conversationId: string; userId: string; isTyping: boolean }) => {
+      if (payload.conversationId === conversationId && payload.userId !== currentUser.id) {
+        setPartnerTyping(payload.isTyping);
+        if (payload.isTyping) {
+          window.clearTimeout(typingTimeoutRef.current as any);
+          typingTimeoutRef.current = window.setTimeout(() => setPartnerTyping(false), 3000);
+        }
+      }
+    });
 
     setSocket(newSocket);
 
     return () => {
       newSocket.close();
     };
+  }, [conversationId, currentUser?.id]);
+
+  useEffect(() => {
+    if (!conversationId || !currentUser?.id) return;
+    const t = window.setInterval(async () => {
+      try {
+        const res = await fetch(`/api/conversations/${conversationId}/messages`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!Array.isArray(data)) return;
+        const deduped = dedupeMessages(data);
+        const prevSet = prevIdsRef.current;
+        let hasNewOther = false;
+        for (const m of deduped) {
+          if (!prevSet.has(m.id)) {
+            if (m.senderId !== currentUser.id) hasNewOther = true;
+            prevSet.add(m.id);
+          }
+        }
+        setMessages(deduped);
+        if (hasNewOther) {
+          onNewMessageRef.current?.();
+          try {
+            await fetch(`/api/conversations/${conversationId}/mark-read`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ userId: currentUser.id })
+            });
+          } catch {}
+        }
+      } catch {}
+    }, 10000);
+    return () => window.clearInterval(t);
   }, [conversationId, currentUser?.id]);
 
   useEffect(() => {
@@ -224,6 +271,29 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
     }
   };
 
+  const emitTypingStart = () => {
+    if (!socket || !isConnected || !conversationId) return;
+    if (!typingActiveRef.current) {
+      socket.emit("typing", { conversationId });
+      typingActiveRef.current = true;
+    }
+    window.clearTimeout(typingTimeoutRef.current as any);
+    typingTimeoutRef.current = window.setTimeout(() => {
+      if (socket && isConnected) {
+        socket.emit("stopTyping", { conversationId });
+      }
+      typingActiveRef.current = false;
+    }, 1200);
+  };
+
+  const emitTypingStopImmediate = () => {
+    window.clearTimeout(typingTimeoutRef.current as any);
+    if (socket && isConnected && conversationId) {
+      socket.emit("stopTyping", { conversationId });
+    }
+    typingActiveRef.current = false;
+  };
+
   const sendMessage = async () => {
     // Autoriser l'envoi même sans connexion socket (fallback HTTP)
     if (!input.trim()) return;
@@ -239,6 +309,7 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
         const created = await res.json();
         setMessages(prev => prev.some(m => m.id === created.id) ? prev : [...prev, created]);
         setInput("");
+        emitTypingStopImmediate();
         setSendError(null);
       } else {
         try {
@@ -331,11 +402,25 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
 
       {/* Input */}
       <div className="border-t border-gray-200 p-4 bg-gray-50">
+        {partnerTyping && (
+          <div className="text-xs text-gray-500 mb-1">
+            {currentUser.role === 'user' ? 'Le prestataire est en train d’écrire...' : 'Le client est en train d’écrire...'}
+          </div>
+        )}
         <div className="flex gap-2">
           <textarea
             ref={inputRef}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              const v = e.target.value;
+              setInput(v);
+              if (v.trim().length > 0) {
+                emitTypingStart();
+              } else {
+                emitTypingStopImmediate();
+              }
+            }}
+            onBlur={emitTypingStopImmediate}
             placeholder="Tapez votre message..."
             className="flex-1 px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white resize-none min-h-[44px] max-h-40"
           />

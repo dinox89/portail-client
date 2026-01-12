@@ -79,6 +79,7 @@ const App: React.FC = () => {
   const [unreadByClient, setUnreadByClient] = useState<Record<string, number>>({});
   const [conversationClientMap, setConversationClientMap] = useState<Record<string, string>>({});
   const socketRef = useRef<any>(null);
+  const defaultTitleRef = useRef<string>('');
 
   // Charger les données sauvegardées au démarrage
   useEffect(() => {
@@ -92,6 +93,25 @@ const App: React.FC = () => {
       }
     }
   }, []);
+
+  useEffect(() => {
+    if (typeof document !== 'undefined' && !defaultTitleRef.current) {
+      defaultTitleRef.current = document.title;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const base = defaultTitleRef.current || document.title;
+    const shouldIndicate = newMessageCount > 0 && (document.hidden || (!showChatModal && !showAdminMessaging));
+    if (shouldIndicate) {
+      const prefix = `(${newMessageCount}) `;
+      const withoutPrefix = base.replace(/^\(\d+\)\s*/, '');
+      document.title = prefix + withoutPrefix;
+    } else if (!document.hidden) {
+      document.title = defaultTitleRef.current || document.title;
+    }
+  }, [newMessageCount, showChatModal, showAdminMessaging]);
 
   useEffect(() => {
     if (clients.length > 0) {
@@ -175,6 +195,30 @@ const App: React.FC = () => {
       socket.close();
     };
   }, [conversationClientMap]);
+
+  useEffect(() => {
+    const t = window.setInterval(async () => {
+      try {
+        const res = await fetch('/api/conversations/admin');
+        if (!res.ok) return;
+        const data = await res.json();
+        const unreadMap: Record<string, number> = {};
+        const map: Record<string, string> = {};
+        data.forEach((conv: any) => {
+          const clientUser = conv.users.find((u: any) => u.id !== 'admin-user-id');
+          if (clientUser) {
+            map[conv.id] = clientUser.id;
+            unreadMap[clientUser.id] = conv.unreadCount || 0;
+          }
+        });
+        setConversationClientMap(map);
+        setUnreadByClient(unreadMap);
+        const total = Object.values(unreadMap).reduce((a, b) => a + b, 0);
+        setNewMessageCount(total);
+      } catch {}
+    }, 10000);
+    return () => window.clearInterval(t);
+  }, []);
 
   const handleLogin = () => {
     if (password === 'admin') {
@@ -289,6 +333,13 @@ const App: React.FC = () => {
       socketRef.current?.emit('joinConversation', data.id);
       socketRef.current?.emit('markAsRead', { conversationId: data.id, userId: 'admin-user-id' });
       setUnreadByClient(prev => ({ ...prev, [client.uniqueId]: 0 }));
+      try {
+        await fetch(`/api/conversations/${data.id}/mark-read`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: 'admin-user-id' })
+        });
+      } catch {}
     } catch (error) {
       console.error('Error fetching conversation:', error);
     }
