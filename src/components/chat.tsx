@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Send, Bell, BellOff } from "lucide-react";
 import { io, Socket } from "socket.io-client";
+import { getPerfDelay } from "@/lib/utils";
 
 interface Message {
   id: string;
@@ -177,16 +178,24 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
     };
   }, [conversationId, currentUser?.id]);
 
-  // Auto-scroll to bottom
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const delay = getPerfDelay();
+    if (delay > 0) {
+      const t = setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, delay);
+      return () => clearTimeout(t);
+    } else {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages]);
 
   useEffect(() => {
     if (!conversationId) return;
+    const delay = getPerfDelay();
     const t = setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
-    }, 80);
+    }, delay);
     return () => clearTimeout(t);
   }, [conversationId, isConnected]);
 
