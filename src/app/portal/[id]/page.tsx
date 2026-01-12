@@ -53,6 +53,7 @@ export default function ClientPage() {
   const chatEndRef = useRef(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  const defaultTitleRef = useRef<string>('');
 
   useEffect(() => {
     const loadClientData = async () => {
@@ -171,12 +172,41 @@ export default function ClientPage() {
     setActiveTab(tab);
     if (tab === 'chat') {
       setUnreadCount(0);
+      if (typeof document !== 'undefined') {
+        document.title = defaultTitleRef.current || document.title;
+      }
     }
   };
 
   const handleNewMessage = () => {
     setUnreadCount((prev) => prev + 1);
+    if (typeof document !== 'undefined' && document.hidden) {
+      if (!defaultTitleRef.current) defaultTitleRef.current = document.title;
+      document.title = 'Nouveau message !';
+    }
   };
+
+  useEffect(() => {
+    if (typeof document !== 'undefined' && !defaultTitleRef.current) {
+      defaultTitleRef.current = document.title;
+    }
+  }, []);
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        document.title = defaultTitleRef.current || document.title;
+      }
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibility);
+    }
+    return () => {
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibility);
+      }
+    };
+  }, []);
 
   // Mise à jour en temps réel du portail
   const handlePortalUpdate = (updated: any) => {

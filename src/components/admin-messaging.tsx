@@ -38,25 +38,39 @@ export default function AdminMessaging() {
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const renderMessageContent = (content: string) => {
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    const isUrl = (text: string) => /^https?:\/\/[^\s]+$/.test(text);
-    const parts = content.split(urlRegex);
-    return parts.map((part, index) => {
-      if (isUrl(part)) {
-        return (
+    const regex = /((?:https?:\/\/|www\.)[^\s]+|(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?:\/[^\s]*)?)/g;
+    const parts: any[] = [];
+    let lastIndex = 0;
+    for (const match of content.matchAll(regex)) {
+      const start = match.index || 0;
+      if (start > lastIndex) parts.push(content.slice(lastIndex, start));
+      let token = match[0];
+      const trailing = token.match(/[)\].,!?;:]+$/)?.[0] || '';
+      token = token.slice(0, token.length - trailing.length);
+      if (token.includes('@')) {
+        parts.push(token + trailing);
+      } else {
+        const href =
+          token.startsWith('http://') || token.startsWith('https://')
+            ? token
+            : `https://${token.startsWith('www.') ? token : token}`;
+        parts.push(
           <a
-            key={index}
-            href={part}
+            key={start}
+            href={href}
             target="_blank"
             rel="noopener noreferrer"
             className="underline text-black hover:text-black break-all"
           >
-            {part}
+            {token}
           </a>
         );
+        if (trailing) parts.push(trailing);
       }
-      return <span key={index}>{part}</span>;
-    });
+      lastIndex = start + match[0].length;
+    }
+    if (lastIndex < content.length) parts.push(content.slice(lastIndex));
+    return parts;
   };
 
   useEffect(() => {
