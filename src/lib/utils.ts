@@ -10,15 +10,15 @@ const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(ma
 export function getPerfDelay(): number {
   try {
     if (typeof window === "undefined") return 100
+    const env = (process.env.NEXT_PUBLIC_PERF_DELAY as any)
+    if (env) {
+      const v = Number(env)
+      if (!Number.isNaN(v)) return clamp(v, 0, 150)
+    }
     const key = "perfDelay"
     const override = window.localStorage.getItem(key)
     if (override) {
       const v = Number(override)
-      if (!Number.isNaN(v)) return clamp(v, 0, 150)
-    }
-    const env = (process.env.NEXT_PUBLIC_PERF_DELAY as any)
-    if (env) {
-      const v = Number(env)
       if (!Number.isNaN(v)) return clamp(v, 0, 150)
     }
     let d = 100

@@ -173,15 +173,14 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
         if (onNewMessageRef.current && message.senderId !== currentUser.id) {
           onNewMessageRef.current();
         }
+        if (message.senderId !== currentUser.id) {
+          setPartnerTyping(false);
+        }
       }
     });
     newSocket.on("typing", (payload: { conversationId: string; userId: string; isTyping: boolean }) => {
       if (payload.conversationId === conversationId && payload.userId !== currentUser.id) {
         setPartnerTyping(payload.isTyping);
-        if (payload.isTyping) {
-          window.clearTimeout(typingTimeoutRef.current as any);
-          typingTimeoutRef.current = window.setTimeout(() => setPartnerTyping(false), 3000);
-        }
       }
     });
 
@@ -277,13 +276,6 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
       socket.emit("typing", { conversationId });
       typingActiveRef.current = true;
     }
-    window.clearTimeout(typingTimeoutRef.current as any);
-    typingTimeoutRef.current = window.setTimeout(() => {
-      if (socket && isConnected) {
-        socket.emit("stopTyping", { conversationId });
-      }
-      typingActiveRef.current = false;
-    }, 1200);
   };
 
   const emitTypingStopImmediate = () => {

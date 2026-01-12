@@ -38,6 +38,9 @@ export default function AdminMessaging() {
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
+  const [partnerTyping, setPartnerTyping] = useState(false);
+  const typingActiveRef = useRef<boolean>(false);
+  const typingTimeoutRef = useRef<number | null>(null);
 
   const renderMessageContent = (content: string) => {
     const regex = /((?:https?:\/\/|www\.)[^\s]+|(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?:\/[^\s]*)?)/g;
@@ -105,12 +108,21 @@ export default function AdminMessaging() {
         }
         return prev;
       });
+      if (message.senderId !== ADMIN_USER_ID) {
+        setPartnerTyping(false);
+      }
     });
 
     // Écouter les notifications globales admin
     newSocket.on('adminNewMessage', () => {
       // Rafraîchir la liste des conversations pour mettre à jour lastMessage/unreadCount
       fetchConversations();
+    });
+
+    newSocket.on('typing', (payload: { conversationId: string; userId: string; isTyping: boolean }) => {
+      if (payload.conversationId && selectedConversation?.id === payload.conversationId && payload.userId !== ADMIN_USER_ID) {
+        setPartnerTyping(payload.isTyping);
+      }
     });
 
     // Charger les conversations initiales
@@ -233,6 +245,7 @@ export default function AdminMessaging() {
         });
         setNewMessage('');
         setSendError(null);
+        emitTypingStopImmediate();
       } else {
         let errMsg = 'Échec de l’envoi du message';
         try {
@@ -246,6 +259,23 @@ export default function AdminMessaging() {
       setSendError('Erreur réseau lors de l’envoi du message');
       console.error('Erreur lors de l\'envoi du message:', error);
     }
+  };
+
+  const emitTypingStart = () => {
+    if (!socket || !selectedConversation?.id) return;
+    if (!typingActiveRef.current) {
+      socket.emit('typing', { conversationId: selectedConversation.id });
+      typingActiveRef.current = true;
+    }
+    window.clearTimeout(typingTimeoutRef.current as any);
+  };
+
+  const emitTypingStopImmediate = () => {
+    window.clearTimeout(typingTimeoutRef.current as any);
+    if (socket && selectedConversation?.id) {
+      socket.emit('stopTyping', { conversationId: selectedConversation.id });
+    }
+    typingActiveRef.current = false;
   };
 
   const getClientName = (conversation: Conversation) => {
@@ -313,12 +343,12 @@ export default function AdminMessaging() {
                 <div
                   key={message.id}
                   className={`flex ${
-                    message.senderId === 'admin-user-id' ? 'justify-end' : 'justify-start'
+                    message.senderId === ADMIN_USER_ID ? 'justify-end' : 'justify-start'
                   }`}
                 >
                   <div
                     className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                      message.senderId === 'admin-user-id'
+                      message.senderId === ADMIN_USER_ID
                         ? 'bg-blue-500 text-white'
                         : 'bg-gray-200 text-gray-800'
                     }`}
@@ -329,7 +359,7 @@ export default function AdminMessaging() {
                     <div className="flex items-center mt-1 text-xs opacity-70">
                       <Clock className="mr-1" size={12} />
                       {new Date(message.createdAt).toLocaleTimeString()}
-                      {message.read && message.senderId === 'admin-user-id' && (
+                      {message.read && message.senderId === ADMIN_USER_ID && (
                         <CheckCircle className="ml-1" size={12} />
                       )}
                     </div>
@@ -340,11 +370,25 @@ export default function AdminMessaging() {
 
             {/* Zone d'envoi */}
             <div className="p-4 border-t border-gray-200 bg-white">
+              {partnerTyping && (
+                <div className="text-xs text-gray-500 mb-1">
+                  Le client est en train d’écrire...
+                </div>
+              )}
               <div className="flex space-x-2">
                 <textarea
                   ref={inputRef}
                   value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setNewMessage(v);
+                    if (v.trim().length > 0) {
+                      emitTypingStart();
+                    } else {
+                      emitTypingStopImmediate();
+                    }
+                  }}
+                  onBlur={emitTypingStopImmediate}
                   placeholder="Tapez votre message..."
                   className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none min-h-[44px] max-h-40"
                 />

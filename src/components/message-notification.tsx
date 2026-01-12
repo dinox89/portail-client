@@ -141,8 +141,15 @@ export default function MessageNotification({ userId = 'admin-user-id', onNewMes
     }, 5000);
   };
 
-  const markAsRead = (messageId: string) => {
-    setNotifications(prev => prev.filter(msg => msg.id !== messageId));
+  const markAsRead = async (notification: NotificationMessage) => {
+    try {
+      await fetch(`/api/conversations/${notification.conversationId}/mark-read`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: ADMIN_USER_ID })
+      });
+    } catch {}
+    setNotifications(prev => prev.filter(msg => msg.id !== notification.id));
     setUnreadCount(prev => {
       const next = Math.max(0, prev - 1);
       onNewMessageCount?.(next);
@@ -150,7 +157,17 @@ export default function MessageNotification({ userId = 'admin-user-id', onNewMes
     });
   };
 
-  const markAllAsRead = () => {
+  const markAllAsRead = async () => {
+    const uniqueConversations = Array.from(new Set(notifications.map(n => n.conversationId)));
+    for (const conversationId of uniqueConversations) {
+      try {
+        await fetch(`/api/conversations/${conversationId}/mark-read`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: ADMIN_USER_ID })
+        });
+      } catch {}
+    }
     setNotifications([]);
     setUnreadCount(0);
     onNewMessageCount?.(0);
@@ -196,7 +213,7 @@ export default function MessageNotification({ userId = 'admin-user-id', onNewMes
                 <div
                   key={notification.id}
                   className="p-4 border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
-                  onClick={() => markAsRead(notification.id)}
+                  onClick={() => markAsRead(notification)}
                 >
                   <div className="flex items-start space-x-3">
                     <div className="bg-purple-100 rounded-full p-2">
