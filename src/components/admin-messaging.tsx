@@ -41,6 +41,7 @@ export default function AdminMessaging() {
   const [partnerTyping, setPartnerTyping] = useState(false);
   const typingActiveRef = useRef<boolean>(false);
   const typingTimeoutRef = useRef<number | null>(null);
+  const selectedConvIdRef = useRef<string | null>(null);
 
   const renderMessageContent = (content: string) => {
     const regex = /((?:https?:\/\/|www\.)[^\s]+|(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?:\/[^\s]*)?)/g;
@@ -120,7 +121,7 @@ export default function AdminMessaging() {
     });
 
     newSocket.on('typing', (payload: { conversationId: string; userId: string; isTyping: boolean }) => {
-      if (payload.conversationId && selectedConversation?.id === payload.conversationId && payload.userId !== ADMIN_USER_ID) {
+      if (payload.conversationId && selectedConvIdRef.current === payload.conversationId && payload.userId !== ADMIN_USER_ID) {
         setPartnerTyping(payload.isTyping);
       }
     });
@@ -197,6 +198,7 @@ export default function AdminMessaging() {
     // Charger les messages pour éviter erreurs d'accès
     const messages = await loadConversationMessages(conversation.id);
     setSelectedConversation({ ...conversation, messages });
+    selectedConvIdRef.current = conversation.id;
 
     // Marquer les messages comme lus
     markMessagesAsRead(conversation.id);

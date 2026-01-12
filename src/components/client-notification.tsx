@@ -37,7 +37,6 @@ export function ClientNotification({ clientId, conversationId, onNewMessage, onP
       if (conversationId) {
         newSocket.emit("joinConversation", conversationId);
       } else {
-        // Fallback: rejoindre toutes les conversations du client
         try {
           const res = await fetch(`/api/conversations/user/${clientId}`);
           if (res.ok) {
@@ -55,15 +54,18 @@ export function ClientNotification({ clientId, conversationId, onNewMessage, onP
     });
 
     newSocket.on("newMessage", (message: any) => {
-      // Messages entrants (admin -> client). Si conversationId inconnu, on notifie quand même.
       const isFromOther = message?.senderId !== clientId;
       const isSameConv = conversationId ? message?.conversationId === conversationId : true;
       if (isFromOther && isSameConv) {
+        const ts = new Date(message?.createdAt).getTime();
+        const key = conversationId || message?.conversationId;
+        if (key && ts) {
+          lastSeenMapRef.current[key] = Math.max(lastSeenMapRef.current[key] || 0, ts);
+        }
         onNewMessageRef.current?.();
       }
     });
 
-    // Mises à jour du portail (projet, étapes, fichiers, progression)
     newSocket.on("portalUpdate", (payload: any) => {
       try {
         if (payload?.userId === clientId) {
@@ -91,6 +93,43 @@ export function ClientNotification({ clientId, conversationId, onNewMessage, onP
   }, [socket, conversationId]);
 
   const lastSeenMapRef = useRef<Record<string, number>>({});
+  const initializedRef = useRef<boolean>(false);
+  useEffect(() => {
+    let cancelled = false;
+    const init = async () => {
+      try {
+        if (conversationId) {
+          const res = await fetch(`/api/conversations/${conversationId}/messages`);
+          if (!res.ok) return;
+          const data = await res.json();
+          if (!Array.isArray(data)) return;
+          const last = data[data.length - 1];
+          if (last && last.senderId !== clientId) {
+            const ts = new Date(last.createdAt).getTime();
+            if (!cancelled) lastSeenMapRef.current[conversationId] = ts;
+          }
+        } else {
+          const res = await fetch(`/api/conversations/user/${clientId}`);
+          if (!res.ok) return;
+          const convs = await res.json();
+          if (!Array.isArray(convs)) return;
+          for (const c of convs) {
+            const last = Array.isArray(c.messages) ? c.messages[0] : null;
+            if (last && last.senderId !== clientId) {
+              const ts = new Date(last.createdAt).getTime();
+              if (!cancelled) lastSeenMapRef.current[c.id] = ts;
+            }
+          }
+        }
+      } finally {
+        if (!cancelled) initializedRef.current = true;
+      }
+    };
+    init();
+    return () => {
+      cancelled = true;
+    };
+  }, [clientId, conversationId]);
   useEffect(() => {
     const t = window.setInterval(async () => {
       try {
@@ -103,7 +142,7 @@ export function ClientNotification({ clientId, conversationId, onNewMessage, onP
           if (last && last.senderId !== clientId) {
             const ts = new Date(last.createdAt).getTime();
             const prev = lastSeenMapRef.current[conversationId] || 0;
-            if (ts > prev) {
+            if (initializedRef.current && ts > prev) {
               lastSeenMapRef.current[conversationId] = ts;
               onNewMessageRef.current?.();
             }
@@ -118,7 +157,7 @@ export function ClientNotification({ clientId, conversationId, onNewMessage, onP
             if (last && last.senderId !== clientId) {
               const ts = new Date(last.createdAt).getTime();
               const prev = lastSeenMapRef.current[c.id] || 0;
-              if (ts > prev) {
+              if (initializedRef.current && ts > prev) {
                 lastSeenMapRef.current[c.id] = ts;
                 onNewMessageRef.current?.();
               }

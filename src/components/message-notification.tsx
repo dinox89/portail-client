@@ -41,6 +41,9 @@ export default function MessageNotification({ userId = 'admin-user-id', onNewMes
   const [showNotifications, setShowNotifications] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const prevTotalRef = useRef<number>(0);
+  const initializedRef = useRef<boolean>(false);
+  const lastNotifiedIdRef = useRef<string | null>(null);
+  const newCountRef = useRef<number>(0);
 
   useEffect(() => {
     const socket = io({
@@ -61,15 +64,16 @@ export default function MessageNotification({ userId = 'admin-user-id', onNewMes
       setNotifications(prev => [notif, ...prev]);
       setUnreadCount(prev => {
         const next = prev + 1;
-        onNewMessageCount?.(next);
+        newCountRef.current = newCountRef.current + 1;
+        onNewMessageCount?.(newCountRef.current);
         return next;
       });
-      showToast(notif);
+      lastNotifiedIdRef.current = notif.id;
+      showToast(notif, true);
     });
 
     socket.on('adminUnreadCount', (payload: AdminUnreadCountEvent) => {
       setUnreadCount(payload.totalUnreadCount);
-      onNewMessageCount?.(payload.totalUnreadCount);
     });
 
     socket.on('connect_error', (err) => {
@@ -90,8 +94,11 @@ export default function MessageNotification({ userId = 'admin-user-id', onNewMes
         if (!Array.isArray(data)) return;
         const total = data.reduce((acc: number, conv: any) => acc + (conv.unreadCount || 0), 0);
         setUnreadCount(total);
-        onNewMessageCount?.(total);
-        if (total > prevTotalRef.current) {
+        if (!initializedRef.current) {
+          initializedRef.current = true;
+          prevTotalRef.current = total;
+        } else if (total > prevTotalRef.current) {
+          const delta = total - prevTotalRef.current;
           prevTotalRef.current = total;
           const latest = data.find((c: any) => c.lastMessage && c.unreadCount > 0)?.lastMessage;
           if (latest) {
@@ -103,8 +110,14 @@ export default function MessageNotification({ userId = 'admin-user-id', onNewMes
               senderName: 'Client',
               createdAt: latest.createdAt,
             };
-            setNotifications(prev => [notif, ...prev]);
-            showToast(notif);
+            if (lastNotifiedIdRef.current !== notif.id) {
+              lastNotifiedIdRef.current = notif.id;
+              setNotifications(prev => [notif, ...prev]);
+              const isPriority = total - prevTotalRef.current >= 3 || /urgent|important/i.test(notif.content) || (notif.content.match(/!/g) || []).length >= 3;
+              showToast(notif, isPriority);
+              newCountRef.current = newCountRef.current + delta;
+              onNewMessageCount?.(newCountRef.current);
+            }
           }
         } else {
           prevTotalRef.current = total;
@@ -114,9 +127,9 @@ export default function MessageNotification({ userId = 'admin-user-id', onNewMes
     return () => window.clearInterval(t);
   }, [ADMIN_USER_ID, onNewMessageCount]);
 
-  const showToast = (message: NotificationMessage) => {
+  const showToast = (message: NotificationMessage, priority = false) => {
     const toast = document.createElement('div');
-    toast.className = 'fixed top-4 right-4 bg-purple-500 text-white px-4 py-3 rounded-lg shadow-lg z-50 transform transition-all duration-300 translate-x-full';
+    toast.className = `fixed top-4 right-4 ${priority ? 'bg-red-600' : 'bg-purple-500'} text-white px-4 py-3 rounded-lg shadow-lg z-50 transform transition-all duration-300 translate-x-full`;
     toast.innerHTML = `
       <div class="flex items-center">
         <div>
@@ -138,7 +151,7 @@ export default function MessageNotification({ userId = 'admin-user-id', onNewMes
           document.body.removeChild(toast);
         }
       }, 300);
-    }, 5000);
+    }, priority ? 7000 : 5000);
   };
 
   const markAsRead = async (notification: NotificationMessage) => {
@@ -170,6 +183,7 @@ export default function MessageNotification({ userId = 'admin-user-id', onNewMes
     }
     setNotifications([]);
     setUnreadCount(0);
+    newCountRef.current = 0;
     onNewMessageCount?.(0);
     setShowNotifications(false);
   };
