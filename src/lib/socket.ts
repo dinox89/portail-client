@@ -21,6 +21,7 @@ export class SocketManager {
   private io: SocketIOServer;
   private userSockets: Map<string, UserSocket[]> = new Map();
   private socketToUser: Map<string, UserSocket> = new Map();
+  private lastTypingAt: Map<string, number> = new Map();
 
   constructor(server: HTTPServer) {
     const allowedOrigins = (() => {
@@ -36,6 +37,8 @@ export class SocketManager {
     this.io = new SocketIOServer(server, {
       path: "/socket.io",
       addTrailingSlash: false,
+      pingInterval: 15000,
+      pingTimeout: 5000,
       cors: {
         origin: allowedOrigins,
         methods: ["GET", "POST"],
@@ -101,6 +104,11 @@ export class SocketManager {
         console.log(`User ${userId} left conversation ${conversationId}`);
       });
 
+      // Heartbeat keepalive
+      socket.on("heartbeat", (payload: any) => {
+        socket.emit("heartbeat_ack", { t: payload?.t || Date.now() });
+      });
+
       // Envoi de message
       socket.on("sendMessage", async (data: { conversationId: string; content: string }) => {
         try {
@@ -149,7 +157,12 @@ export class SocketManager {
       socket.on("typing", (data: { conversationId: string }) => {
         const { conversationId } = data || {};
         if (conversationId) {
-          this.io.to(conversationId).emit("typing", { conversationId, userId, isTyping: true });
+          const now = Date.now();
+          const last = this.lastTypingAt.get(socket.id) || 0;
+          if (now - last >= 200) {
+            this.lastTypingAt.set(socket.id, now);
+            this.io.to(conversationId).emit("typing", { conversationId, userId, isTyping: true });
+          }
         }
       });
 

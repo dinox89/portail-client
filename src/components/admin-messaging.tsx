@@ -95,8 +95,26 @@ export default function AdminMessaging() {
       path: '/socket.io',
       addTrailingSlash: false,
       auth: { userId: ADMIN_USER_ID },
+      reconnection: true,
+      reconnectionAttempts: 20,
+      reconnectionDelay: 300,
+      reconnectionDelayMax: 10000,
+      timeout: 8000,
+      transports: ['websocket', 'polling'],
     });
     setSocket(newSocket);
+
+    const hb = window.setInterval(() => {
+      try {
+        newSocket.emit('heartbeat', { t: Date.now() });
+      } catch {}
+    }, 15000);
+
+    newSocket.on('connect', () => {
+      if (selectedConvIdRef.current) {
+        newSocket.emit('joinConversation', selectedConvIdRef.current);
+      }
+    });
 
     // Écouter les nouveaux messages dans la conversation rejointe
     newSocket.on('newMessage', (message: Message) => {
@@ -132,6 +150,7 @@ export default function AdminMessaging() {
 
     return () => {
       newSocket.close();
+      window.clearInterval(hb);
     };
   }, []);
 
@@ -182,8 +201,13 @@ export default function AdminMessaging() {
     pollRef.current = window.setInterval(async () => {
       await fetchConversations();
       if (selectedConversation?.id) {
-        const msgs = await loadConversationMessages(selectedConversation.id);
-        setSelectedConversation(prev => prev ? { ...prev, messages: msgs } : prev);
+        const currentConv = (conversations || []).find(c => c.id === selectedConversation.id);
+        const currLastId = currentConv?.lastMessage?.id;
+        const prevLastId = selectedConversation.lastMessage?.id;
+        if (!currLastId || currLastId !== prevLastId) {
+          const msgs = await loadConversationMessages(selectedConversation.id);
+          setSelectedConversation(prev => prev ? { ...prev, messages: msgs, lastMessage: currentConv?.lastMessage || prev.lastMessage } : prev);
+        }
       }
     }, 3000);
     return () => {
