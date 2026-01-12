@@ -123,7 +123,7 @@ export default function MessageNotification({ userId = 'admin-user-id', onNewMes
           prevTotalRef.current = total;
         }
       } catch {}
-    }, 10000);
+    }, 3000);
     return () => window.clearInterval(t);
   }, [ADMIN_USER_ID, onNewMessageCount]);
 

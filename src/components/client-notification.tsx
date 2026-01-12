@@ -165,7 +165,7 @@ export function ClientNotification({ clientId, conversationId, onNewMessage, onP
           }
         }
       } catch {}
-    }, 10000);
+    }, 3000);
     return () => window.clearInterval(t);
   }, [clientId, conversationId]);
 

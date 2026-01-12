@@ -185,7 +185,7 @@ export default function AdminMessaging() {
         const msgs = await loadConversationMessages(selectedConversation.id);
         setSelectedConversation(prev => prev ? { ...prev, messages: msgs } : prev);
       }
-    }, 10000);
+    }, 3000);
     return () => {
       if (pollRef.current) window.clearInterval(pollRef.current);
       pollRef.current = null;
