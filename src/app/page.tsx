@@ -80,6 +80,8 @@ const App: React.FC = () => {
   const [conversationClientMap, setConversationClientMap] = useState<Record<string, string>>({});
   const socketRef = useRef<any>(null);
   const defaultTitleRef = useRef<string>('');
+  const baselineUnreadRef = useRef<number>(0);
+  const adminInitRef = useRef<boolean>(false);
 
   // Charger les données sauvegardées au démarrage
   useEffect(() => {
@@ -148,7 +150,8 @@ const App: React.FC = () => {
         setConversationClientMap(map);
         setUnreadByClient(unreadMap);
         const total = Object.values(unreadMap).reduce((a, b) => a + b, 0);
-        setNewMessageCount(total);
+        baselineUnreadRef.current = total;
+        setNewMessageCount(0);
       } catch (e) {
         console.error('Erreur de chargement des conversations admin:', e);
       }
@@ -162,7 +165,14 @@ const App: React.FC = () => {
     socketRef.current = socket;
 
     socket.on('adminUnreadCount', (payload: { totalUnreadCount: number; conversations: { conversationId: string; unreadCount: number }[] }) => {
-      setNewMessageCount(payload.totalUnreadCount);
+      if (!adminInitRef.current) {
+        adminInitRef.current = true;
+        baselineUnreadRef.current = payload.totalUnreadCount;
+        setNewMessageCount(0);
+      } else {
+        const delta = Math.max(0, payload.totalUnreadCount - baselineUnreadRef.current);
+        setNewMessageCount(delta);
+      }
       setUnreadByClient(prev => {
         const next = { ...prev };
         payload.conversations.forEach(item => {
@@ -214,7 +224,8 @@ const App: React.FC = () => {
         setConversationClientMap(map);
         setUnreadByClient(unreadMap);
         const total = Object.values(unreadMap).reduce((a, b) => a + b, 0);
-        setNewMessageCount(total);
+        const delta = Math.max(0, total - baselineUnreadRef.current);
+        setNewMessageCount(delta);
       } catch {}
     }, 10000);
     return () => window.clearInterval(t);

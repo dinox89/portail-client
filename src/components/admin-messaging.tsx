@@ -42,6 +42,7 @@ export default function AdminMessaging() {
   const typingActiveRef = useRef<boolean>(false);
   const typingTimeoutRef = useRef<number | null>(null);
   const selectedConvIdRef = useRef<string | null>(null);
+  const autoSelectedRef = useRef<boolean>(false);
 
   const renderMessageContent = (content: string) => {
     const regex = /((?:https?:\/\/|www\.)[^\s]+|(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?:\/[^\s]*)?)/g;
@@ -141,6 +142,13 @@ export default function AdminMessaging() {
       if (res.ok) {
         const data = await res.json();
         setConversations(data);
+        if (!autoSelectedRef.current && !selectedConversation && Array.isArray(data) && data.length > 0) {
+          const preferred = data.find((c: any) => (c.unreadCount || 0) > 0) || data[0];
+          if (preferred) {
+            await selectConversation(preferred);
+            autoSelectedRef.current = true;
+          }
+        }
       }
     } catch (error) {
       console.error('Erreur lors du chargement des conversations:', error);
