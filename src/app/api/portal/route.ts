@@ -1,9 +1,14 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getIO } from '@/lib/socket';
+import { rateLimiter, getClientKey } from '@/lib/rateLimit';
 
 export async function POST(request: Request) {
   try {
+    const key = getClientKey(request);
+    if (!rateLimiter.check(key)) {
+      return NextResponse.json({ error: 'Trop de requêtes' }, { status: 429 });
+    }
     const body = await request.json();
     const {
       uniqueId,

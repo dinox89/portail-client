@@ -90,18 +90,35 @@ export default function AdminMessaging() {
   }, [newMessage]);
 
   useEffect(() => {
-    // Initialiser la connexion Socket.IO (admin)
-    const newSocket = io({
-      path: '/socket.io',
-      addTrailingSlash: false,
-      auth: { userId: ADMIN_USER_ID },
-      reconnection: true,
-      reconnectionAttempts: 20,
-      reconnectionDelay: 300,
-      reconnectionDelayMax: 10000,
-      timeout: 8000,
-      transports: ['websocket', 'polling'],
-    });
+    const attempts = Number(process.env.NEXT_PUBLIC_SOCKET_RECONNECT_ATTEMPTS ?? 20);
+    const delay = Number(process.env.NEXT_PUBLIC_SOCKET_RECONNECT_DELAY ?? 300);
+    const delayMax = Number(process.env.NEXT_PUBLIC_SOCKET_RECONNECT_DELAY_MAX ?? 10000);
+    const timeout = Number(process.env.NEXT_PUBLIC_SOCKET_TIMEOUT ?? 8000);
+
+    const fetchToken = async () => {
+      try {
+        const res = await fetch(`/api/realtime/token?userId=${ADMIN_USER_ID}`);
+        if (res.ok) {
+          const data = await res.json();
+          return data?.token || null;
+        }
+      } catch {}
+      return null;
+    };
+
+    const setup = async () => {
+      const token = await fetchToken();
+      const newSocket = io({
+        path: '/socket.io',
+        addTrailingSlash: false,
+        auth: token ? { token } : { userId: ADMIN_USER_ID },
+        reconnection: true,
+        reconnectionAttempts: attempts,
+        reconnectionDelay: delay,
+        reconnectionDelayMax: delayMax,
+        timeout,
+        transports: ['websocket', 'polling'],
+      });
     setSocket(newSocket);
 
     const hb = window.setInterval(() => {
@@ -152,6 +169,8 @@ export default function AdminMessaging() {
       newSocket.close();
       window.clearInterval(hb);
     };
+    };
+    setup();
   }, []);
 
   const fetchConversations = async () => {

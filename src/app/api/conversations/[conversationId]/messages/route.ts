@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { rateLimiter, getClientKey } from '@/lib/rateLimit';
 // Utiliser un alias assoupli pour éviter les erreurs de typage sur les délégués Prisma
 const prisma = db as any;
 
@@ -34,6 +35,10 @@ export async function POST(
   { params }: { params: Promise<{ conversationId: string }> }
 ) {
   try {
+    const key = getClientKey(request);
+    if (!rateLimiter.check(key)) {
+      return NextResponse.json({ error: 'Trop de requêtes' }, { status: 429 });
+    }
     const { conversationId } = await params;
     const { content, senderId } = await request.json();
 

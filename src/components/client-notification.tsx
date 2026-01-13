@@ -19,17 +19,35 @@ export function ClientNotification({ clientId, conversationId, onNewMessage, onP
   useEffect(() => { onPortalUpdateRef.current = onPortalUpdate; }, [onPortalUpdate]);
 
   useEffect(() => {
-    const newSocket = io({
-      path: "/socket.io",
-      addTrailingSlash: false,
-      auth: { userId: clientId },
-      transports: ["websocket", "polling"],
-      reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 500,
-      reconnectionDelayMax: 2000,
-      timeout: 8000,
-    });
+    const attempts = Number(process.env.NEXT_PUBLIC_SOCKET_RECONNECT_ATTEMPTS ?? 10);
+    const delay = Number(process.env.NEXT_PUBLIC_SOCKET_RECONNECT_DELAY ?? 500);
+    const delayMax = Number(process.env.NEXT_PUBLIC_SOCKET_RECONNECT_DELAY_MAX ?? 2000);
+    const timeout = Number(process.env.NEXT_PUBLIC_SOCKET_TIMEOUT ?? 8000);
+
+    const fetchToken = async () => {
+      try {
+        const res = await fetch(`/api/realtime/token?userId=${clientId}`);
+        if (res.ok) {
+          const data = await res.json();
+          return data?.token || null;
+        }
+      } catch {}
+      return null;
+    };
+
+    const setup = async () => {
+      const token = await fetchToken();
+      const newSocket = io({
+        path: "/socket.io",
+        addTrailingSlash: false,
+        auth: token ? { token } : { userId: clientId },
+        transports: ["websocket", "polling"],
+        reconnection: true,
+        reconnectionAttempts: attempts,
+        reconnectionDelay: delay,
+        reconnectionDelayMax: delayMax,
+        timeout,
+      });
 
     setSocket(newSocket);
 
@@ -83,6 +101,8 @@ export function ClientNotification({ clientId, conversationId, onNewMessage, onP
     return () => {
       newSocket.disconnect();
     };
+    };
+    setup();
   }, [clientId, conversationId]);
 
   // Si l'ID de conversation arrive après coup, rejoindre la room

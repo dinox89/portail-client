@@ -136,17 +136,33 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
   // Setup socket connection (stabilisé: dépend seulement de conversationId et currentUser.id)
   useEffect(() => {
     if (!conversationId || !currentUser?.id) return;
+    const attempts = Number(process.env.NEXT_PUBLIC_SOCKET_RECONNECT_ATTEMPTS ?? 10);
+    const delay = Number(process.env.NEXT_PUBLIC_SOCKET_RECONNECT_DELAY ?? 500);
+    const timeout = Number(process.env.NEXT_PUBLIC_SOCKET_TIMEOUT ?? 5000);
 
-    const newSocket = io({
-      path: "/socket.io",
-      addTrailingSlash: false,
-      auth: { userId: currentUser.id },
-      transports: ["websocket", "polling"],
-      reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 500,
-      timeout: 5000,
-    });
+    const fetchToken = async () => {
+      try {
+        const res = await fetch(`/api/realtime/token?userId=${currentUser.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          return data?.token || null;
+        }
+      } catch {}
+      return null;
+    };
+
+    const setup = async () => {
+      const token = await fetchToken();
+      const newSocket = io({
+        path: "/socket.io",
+        addTrailingSlash: false,
+        auth: token ? { token } : { userId: currentUser.id },
+        transports: ["websocket", "polling"],
+        reconnection: true,
+        reconnectionAttempts: attempts,
+        reconnectionDelay: delay,
+        timeout,
+      });
 
     newSocket.on("connect", () => {
       setIsConnected(true);
@@ -189,6 +205,8 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
     return () => {
       newSocket.close();
     };
+    };
+    setup();
   }, [conversationId, currentUser?.id]);
 
   useEffect(() => {
