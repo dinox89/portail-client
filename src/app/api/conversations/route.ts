@@ -3,10 +3,26 @@ import { db } from '@/lib/db';
 
 export async function POST(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const portalToken = searchParams.get('portalToken');
     const { userId1, userId2 } = await request.json();
 
     if (!userId1 || !userId2) {
       return NextResponse.json({ error: 'Missing user IDs' }, { status: 400 });
+    }
+
+    if (portalToken) {
+      const clientPortal = await (db as any).clientPortal.findUnique({
+        where: { accessToken: portalToken },
+        select: { id: true },
+      });
+      if (!clientPortal?.id || clientPortal.id !== userId1) {
+        return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
+      }
+      const adminId = process.env.NEXT_PUBLIC_ADMIN_USER_ID || 'admin-user-id';
+      if (userId2 !== adminId) {
+        return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
+      }
     }
 
     // Make sure both users exist; create placeholder users if they don't.

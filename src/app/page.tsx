@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, Plus, Search, Edit2, Trash2, X, Save, Building2, ExternalLink, Copy, Check, Upload, FileText, Download, Lock, LogOut, Image as ImageIcon, MessageSquare } from "lucide-react";
+import { Users, Plus, Search, Edit2, Trash2, X, Save, Building2, ExternalLink, Copy, Check, Upload, FileText, Download, Lock, LogOut, Image as ImageIcon, MessageSquare, RefreshCcw } from "lucide-react";
 import Chat from "@/components/chat";
 import AdminMessaging from '@/components/admin-messaging';
 import { io } from 'socket.io-client';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { useRouter } from "next/navigation";
 
 interface Step {
   id: number;
@@ -45,6 +46,7 @@ interface Project {
 interface Client {
   id: number;
   uniqueId: string;
+  accessToken?: string;
   name: string;
   contact: string;
   email: string;
@@ -53,9 +55,10 @@ interface Client {
 }
 
 const App: React.FC = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(true);
   const [password, setPassword] = useState('');
   const [showPasswordError, setShowPasswordError] = useState(false);
+  const router = useRouter();
   
   const [clients, setClients] = useState<Client[]>([]);
   
@@ -123,16 +126,9 @@ const App: React.FC = () => {
     }
   }, [clients]);
 
-  // Vérifier si l'utilisateur est déjà authentifié
-  useEffect(() => {
-    const auth = localStorage.getItem('isAuthenticated');
-    if (auth === 'true') {
-      setIsAuthenticated(true);
-    }
-  }, []);
-
   // Charger les conversations admin et initialiser les compteurs par client
   useEffect(() => {
+    if (!isAuthenticated) return;
     const loadAdminConversations = async () => {
       try {
         const res = await fetch('/api/conversations/admin');
@@ -157,56 +153,77 @@ const App: React.FC = () => {
       }
     };
     loadAdminConversations();
-  }, []);
+  }, [isAuthenticated]);
 
   // Initialiser le socket admin et synchroniser les compteurs
   useEffect(() => {
-    const socket = io({ path: '/socket.io', addTrailingSlash: false, auth: { userId: 'admin-user-id' } });
-    socketRef.current = socket;
-
-    socket.on('adminUnreadCount', (payload: { totalUnreadCount: number; conversations: { conversationId: string; unreadCount: number }[] }) => {
-      if (!adminInitRef.current) {
-        adminInitRef.current = true;
-        baselineUnreadRef.current = payload.totalUnreadCount;
-        setNewMessageCount(0);
-      } else {
-        const delta = Math.max(0, payload.totalUnreadCount - baselineUnreadRef.current);
-        setNewMessageCount(delta);
-      }
-      setUnreadByClient(prev => {
-        const next = { ...prev };
-        payload.conversations.forEach(item => {
-          const clientId = conversationClientMap[item.conversationId];
-          if (clientId) {
-            next[clientId] = item.unreadCount;
-          }
-        });
-        return next;
-      });
-    });
-
-    socket.on('adminNewMessage', (payload: { conversationId: string; unreadCount: number }) => {
-      setNewMessageCount(prev => prev + 1);
-      setUnreadByClient(prev => {
-        const next = { ...prev };
-        const clientId = conversationClientMap[payload.conversationId];
-        if (clientId) {
-          next[clientId] = payload.unreadCount;
+    if (!isAuthenticated) return;
+    let cancelled = false;
+    const setup = async () => {
+      const adminId = process.env.NEXT_PUBLIC_ADMIN_USER_ID ?? 'admin-user-id';
+      let token: string | null = null;
+      try {
+        const res = await fetch(`/api/realtime/token?userId=${encodeURIComponent(adminId)}`);
+        if (res.ok) {
+          const data = await res.json();
+          token = data?.token || null;
         }
-        return next;
+      } catch {}
+      if (cancelled) return;
+      const socket = io({
+        path: '/socket.io',
+        addTrailingSlash: false,
+        auth: token ? { token } : { userId: adminId },
       });
-    });
+      socketRef.current = socket;
 
-    socket.on('connect_error', (err: any) => {
-      console.error('Socket connection error:', err);
-    });
+      socket.on('adminUnreadCount', (payload: { totalUnreadCount: number; conversations: { conversationId: string; unreadCount: number }[] }) => {
+        if (!adminInitRef.current) {
+          adminInitRef.current = true;
+          baselineUnreadRef.current = payload.totalUnreadCount;
+          setNewMessageCount(0);
+        } else {
+          const delta = Math.max(0, payload.totalUnreadCount - baselineUnreadRef.current);
+          setNewMessageCount(delta);
+        }
+        setUnreadByClient(prev => {
+          const next = { ...prev };
+          payload.conversations.forEach(item => {
+            const clientId = conversationClientMap[item.conversationId];
+            if (clientId) {
+              next[clientId] = item.unreadCount;
+            }
+          });
+          return next;
+        });
+      });
+
+      socket.on('adminNewMessage', (payload: { conversationId: string; unreadCount: number }) => {
+        setNewMessageCount(prev => prev + 1);
+        setUnreadByClient(prev => {
+          const next = { ...prev };
+          const clientId = conversationClientMap[payload.conversationId];
+          if (clientId) {
+            next[clientId] = payload.unreadCount;
+          }
+          return next;
+        });
+      });
+
+      socket.on('connect_error', (err: any) => {
+        console.error('Socket connection error:', err);
+      });
+    };
+    setup();
 
     return () => {
-      socket.close();
+      cancelled = true;
+      if (socketRef.current) socketRef.current.close();
     };
-  }, [conversationClientMap]);
+  }, [conversationClientMap, isAuthenticated]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     const t = window.setInterval(async () => {
       try {
         const res = await fetch('/api/conversations/admin');
@@ -229,75 +246,51 @@ const App: React.FC = () => {
       } catch {}
     }, 10000);
     return () => window.clearInterval(t);
-  }, []);
+  }, [isAuthenticated]);
 
-  const handleLogin = () => {
-    if (password === 'admin') {
-      setIsAuthenticated(true);
-      localStorage.setItem('isAuthenticated', 'true');
-      setShowPasswordError(false);
-      setPassword('');
-    } else {
-      setShowPasswordError(true);
-      setTimeout(() => setShowPasswordError(false), 3000);
-    }
+  const handleLogin = async () => {
+    try {
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      if (res.ok) {
+        setIsAuthenticated(true);
+        localStorage.setItem('isAuthenticated', 'true');
+        setShowPasswordError(false);
+        setPassword('');
+        return;
+      }
+    } catch {}
+    setShowPasswordError(true);
+    setTimeout(() => setShowPasswordError(false), 3000);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setIsAuthenticated(false);
     localStorage.removeItem('isAuthenticated');
+    try {
+      await fetch('/api/admin/logout', { method: 'POST' });
+    } catch {}
+    router.replace('/admin/login');
   };
 
   const generateUniqueId = () => {
-    return 'client-' + Math.random().toString(36).substr(2, 9) + '-' + Date.now().toString(36);
+    const cryptoObj = typeof globalThis !== 'undefined' ? (globalThis.crypto as any) : undefined;
+    if (cryptoObj?.randomUUID) {
+      return cryptoObj.randomUUID();
+    }
+    return 'client-' + Math.random().toString(36).slice(2, 10) + '-' + Date.now().toString(36);
   };
 
-  const getPortalLink = (uniqueId: string) => {
-    return `${window.location.origin}/portal/${uniqueId}`;
+  const getPortalLink = (accessToken?: string) => {
+    if (!accessToken) return 'Lien en cours de génération...';
+    return `${window.location.origin}/portal/${accessToken}`;
   };
 
   // Persister un client dans la base pour synchroniser le portail
   const persistClientPortal = async (client: Client) => {
-    try {
-      await fetch('/api/portal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          uniqueId: client.uniqueId,
-          name: client.name,
-          contact: client.contact,
-          email: client.email,
-          progression: client.progression,
-          project: client.project,
-        }),
-      });
-    } catch (e) {
-      console.error('Erreur de persistance ClientPortal:', e);
-    }
-  };
-
-  const copyPortalLink = async (uniqueId: string) => {
-    // Utiliser l’état d’édition si présent pour éviter des données obsolètes
-    const client = (editingProject && editingProject.uniqueId === uniqueId)
-      ? editingProject
-      : clients.find(c => c.uniqueId === uniqueId) || null;
-    if (client) {
-      await persistClientPortal(client);
-    }
-
-    const link = getPortalLink(uniqueId);
-    await navigator.clipboard.writeText(link);
-    setCopiedId(uniqueId);
-    setTimeout(() => setCopiedId(null), 2000);
-  };
-
-  const openClientPortal = async (client: Client) => {
-    const portalUrl = `${window.location.origin}/portal/${client.uniqueId}`;
-    console.log('🚀 Ouverture du portail pour:', client.name);
-    console.log('📋 URL:', portalUrl);
-    console.log('📊 Données du projet:', client.project);
-
-    // Upsert des données du portail côté serveur pour rendre le lien accessible sur tout appareil
     try {
       const res = await fetch('/api/portal', {
         method: 'POST',
@@ -311,13 +304,57 @@ const App: React.FC = () => {
           project: client.project,
         }),
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        console.error('Échec de l’upsert du portail client:', err);
+      if (!res.ok) return client.accessToken || null;
+      const data = await res.json();
+      const accessToken = data?.accessToken as string | undefined;
+      if (accessToken) {
+        setClients(prev => prev.map(c => c.uniqueId === client.uniqueId ? { ...c, accessToken } : c));
+        if (editingProject?.uniqueId === client.uniqueId) {
+          setEditingProject({ ...editingProject, accessToken });
+        }
       }
+      return accessToken || client.accessToken || null;
     } catch (e) {
-      console.error('Erreur réseau lors de l’upsert du portail client:', e);
+      console.error('Erreur de persistance ClientPortal:', e);
     }
+    return client.accessToken || null;
+  };
+
+  const copyPortalLink = async (client: Client) => {
+    const accessToken = await persistClientPortal(client);
+    if (!accessToken) return;
+    const link = getPortalLink(accessToken);
+    await navigator.clipboard.writeText(link);
+    setCopiedId(accessToken);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const regeneratePortalLink = async (client: Client) => {
+    try {
+      const res = await fetch('/api/portal', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uniqueId: client.uniqueId }),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const accessToken = data?.accessToken as string | undefined;
+      if (accessToken) {
+        setClients(prev => prev.map(c => c.uniqueId === client.uniqueId ? { ...c, accessToken } : c));
+        if (editingProject?.uniqueId === client.uniqueId) {
+          setEditingProject({ ...editingProject, accessToken });
+        }
+      }
+    } catch {}
+  };
+
+  const openClientPortal = async (client: Client) => {
+    const accessToken = await persistClientPortal(client);
+    if (!accessToken) return;
+    const portalUrl = getPortalLink(accessToken);
+    console.log('🚀 Ouverture du portail pour:', client.name);
+    console.log('📋 URL:', portalUrl);
+    console.log('📊 Données du projet:', client.project);
 
     window.open(portalUrl, '_blank', 'noopener,noreferrer');
   };
@@ -640,9 +677,6 @@ const App: React.FC = () => {
             </button>
           </div>
 
-          <div className="mt-6 text-center text-sm text-gray-500">
-            Utilisez le mot de passe : <span className="font-mono bg-gray-100 px-2 py-1 rounded">admin</span>
-          </div>
         </div>
       </div>
     );
@@ -696,25 +730,35 @@ const App: React.FC = () => {
               <div>
                 <p className="text-sm text-blue-800 font-semibold mb-1">🔗 Lien du portail client :</p>
                 <code className="text-sm text-blue-600 bg-white px-3 py-1 rounded">
-                  {getPortalLink(editingProject.uniqueId)}
+                  {getPortalLink(editingProject.accessToken)}
                 </code>
               </div>
-              <button
-                onClick={() => copyPortalLink(editingProject.uniqueId)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
-              >
-                {copiedId === editingProject.uniqueId ? (
-                  <>
-                    <Check size={18} />
-                    Copié !
-                  </>
-                ) : (
-                  <>
-                    <Copy size={18} />
-                    Copier
-                  </>
-                )}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => copyPortalLink(editingProject)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                >
+                  {copiedId === editingProject.accessToken ? (
+                    <>
+                      <Check size={18} />
+                      Copié !
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={18} />
+                      Copier
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => regeneratePortalLink(editingProject)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 flex items-center gap-2"
+                  title="Régénérer le lien"
+                >
+                  <RefreshCcw size={18} />
+                  Régénérer
+                </button>
+              </div>
             </div>
           </div>
 

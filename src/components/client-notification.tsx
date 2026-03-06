@@ -8,15 +8,21 @@ interface ClientNotificationProps {
   conversationId?: string | null;
   onNewMessage?: () => void;
   onPortalUpdate?: (client: any) => void;
+  portalToken?: string;
 }
 
 // Composant headless: aucune UI, uniquement la logique socket
-export function ClientNotification({ clientId, conversationId, onNewMessage, onPortalUpdate }: ClientNotificationProps) {
+export function ClientNotification({ clientId, conversationId, onNewMessage, onPortalUpdate, portalToken }: ClientNotificationProps) {
   const [socket, setSocket] = useState<Socket | null>(null);
   const onNewMessageRef = useRef<(() => void) | undefined>(onNewMessage);
   useEffect(() => { onNewMessageRef.current = onNewMessage; }, [onNewMessage]);
   const onPortalUpdateRef = useRef<((client: any) => void) | undefined>(onPortalUpdate);
   useEffect(() => { onPortalUpdateRef.current = onPortalUpdate; }, [onPortalUpdate]);
+  const withPortalToken = (url: string) => {
+    if (!portalToken) return url;
+    const joiner = url.includes("?") ? "&" : "?";
+    return `${url}${joiner}portalToken=${encodeURIComponent(portalToken)}`;
+  };
 
   useEffect(() => {
     const attempts = Number(process.env.NEXT_PUBLIC_SOCKET_RECONNECT_ATTEMPTS ?? 10);
@@ -26,7 +32,10 @@ export function ClientNotification({ clientId, conversationId, onNewMessage, onP
 
     const fetchToken = async () => {
       try {
-        const res = await fetch(`/api/realtime/token?userId=${clientId}`);
+        const query = portalToken
+          ? `portalToken=${encodeURIComponent(portalToken)}`
+          : `userId=${encodeURIComponent(clientId)}`;
+        const res = await fetch(`/api/realtime/token?${query}`);
         if (res.ok) {
           const data = await res.json();
           return data?.token || null;
@@ -56,7 +65,7 @@ export function ClientNotification({ clientId, conversationId, onNewMessage, onP
         newSocket.emit("joinConversation", conversationId);
       } else {
         try {
-          const res = await fetch(`/api/conversations/user/${clientId}`);
+          const res = await fetch(withPortalToken(`/api/conversations/user/${clientId}`));
           if (res.ok) {
             const convs = await res.json();
             if (Array.isArray(convs)) {
@@ -103,7 +112,7 @@ export function ClientNotification({ clientId, conversationId, onNewMessage, onP
     };
     };
     setup();
-  }, [clientId, conversationId]);
+  }, [clientId, conversationId, portalToken]);
 
   // Si l'ID de conversation arrive après coup, rejoindre la room
   useEffect(() => {
@@ -119,7 +128,7 @@ export function ClientNotification({ clientId, conversationId, onNewMessage, onP
     const init = async () => {
       try {
         if (conversationId) {
-          const res = await fetch(`/api/conversations/${conversationId}/messages`);
+          const res = await fetch(withPortalToken(`/api/conversations/${conversationId}/messages`));
           if (!res.ok) return;
           const data = await res.json();
           if (!Array.isArray(data)) return;
@@ -129,7 +138,7 @@ export function ClientNotification({ clientId, conversationId, onNewMessage, onP
             if (!cancelled) lastSeenMapRef.current[conversationId] = ts;
           }
         } else {
-          const res = await fetch(`/api/conversations/user/${clientId}`);
+          const res = await fetch(withPortalToken(`/api/conversations/user/${clientId}`));
           if (!res.ok) return;
           const convs = await res.json();
           if (!Array.isArray(convs)) return;
@@ -154,7 +163,7 @@ export function ClientNotification({ clientId, conversationId, onNewMessage, onP
     const t = window.setInterval(async () => {
       try {
         if (conversationId) {
-          const res = await fetch(`/api/conversations/${conversationId}/messages`);
+          const res = await fetch(withPortalToken(`/api/conversations/${conversationId}/messages`));
           if (!res.ok) return;
           const data = await res.json();
           if (!Array.isArray(data)) return;
@@ -168,7 +177,7 @@ export function ClientNotification({ clientId, conversationId, onNewMessage, onP
             }
           }
         } else {
-          const res = await fetch(`/api/conversations/user/${clientId}`);
+          const res = await fetch(withPortalToken(`/api/conversations/user/${clientId}`));
           if (!res.ok) return;
           const convs = await res.json();
           if (!Array.isArray(convs)) return;

@@ -36,6 +36,7 @@ interface Project {
 interface Client {
   id: number;
   uniqueId: string;
+  accessToken?: string;
   name: string;
   contact: string;
   email: string;
@@ -45,7 +46,7 @@ interface Client {
 
 export default function ClientPage() {
   const params = useParams();
-  const clientId = params.id as string;
+  const portalToken = params.id as string;
   const [activeTab, setActiveTab] = useState("project");
   const [client, setClient] = useState<Client | null>(null);
   const [loading, setLoading] = useState(true);
@@ -54,17 +55,18 @@ export default function ClientPage() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const defaultTitleRef = useRef<string>('');
+  const clientUniqueId = client?.uniqueId || '';
 
   useEffect(() => {
     const loadClientData = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/portal/${clientId}`, { cache: 'no-store' });
+        const res = await fetch(`/api/portal/${portalToken}`, { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
           setClient({
             id: 0,
-            uniqueId: clientId,
+            uniqueId: data.id,
             name: data.name,
             contact: data.contact,
             email: data.email,
@@ -78,7 +80,7 @@ export default function ClientPage() {
             if (!savedData) return false;
             try {
               const clients: Client[] = JSON.parse(savedData);
-              const foundClient = clients.find(c => c.uniqueId === clientId);
+              const foundClient = clients.find(c => c.accessToken === portalToken);
               if (foundClient) {
                 setClient(foundClient);
                 setError(false);
@@ -99,7 +101,7 @@ export default function ClientPage() {
         if (savedData) {
           try {
             const clients: Client[] = JSON.parse(savedData);
-            const foundClient = clients.find(c => c.uniqueId === clientId);
+            const foundClient = clients.find(c => c.accessToken === portalToken);
             if (foundClient) {
               setClient(foundClient);
               setError(false);
@@ -117,19 +119,19 @@ export default function ClientPage() {
       }
     };
 
-    if (clientId) {
+    if (portalToken) {
       loadClientData();
     }
-  }, [clientId]);
+  }, [portalToken]);
 
   useEffect(() => {
-    if (clientId) {
+    if (clientUniqueId) {
       const fetchConversation = async () => {
         try {
-          const res = await fetch('/api/conversations', {
+          const res = await fetch(`/api/conversations?portalToken=${encodeURIComponent(portalToken)}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId1: clientId, userId2: 'admin-user-id' }),
+            body: JSON.stringify({ userId1: clientUniqueId, userId2: 'admin-user-id' }),
           });
           
           if (!res.ok) {
@@ -146,18 +148,18 @@ export default function ClientPage() {
       };
       fetchConversation();
     }
-  }, [clientId]);
+  }, [clientUniqueId]);
 
   // Seed initial unread count from server messages on load
   useEffect(() => {
     const seedUnread = async () => {
-      if (!conversationId || !clientId) return;
+      if (!conversationId || !clientUniqueId) return;
       try {
-        const res = await fetch(`/api/conversations/${conversationId}/messages`);
+        const res = await fetch(`/api/conversations/${conversationId}/messages?portalToken=${encodeURIComponent(portalToken)}`);
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data)) {
-            const initialCount = data.filter((m: any) => !m.read && m.senderId !== clientId).length;
+            const initialCount = data.filter((m: any) => !m.read && m.senderId !== clientUniqueId).length;
             setUnreadCount(prev => Math.max(prev, initialCount));
           }
         }
@@ -166,7 +168,7 @@ export default function ClientPage() {
       }
     };
     seedUnread();
-  }, [conversationId, clientId]);
+  }, [conversationId, clientUniqueId]);
 
   const switchTab = (tab: string) => {
     setActiveTab(tab);
@@ -232,7 +234,7 @@ export default function ClientPage() {
       setClient((prev) => {
         const base = {
           id: prev?.id ?? 0,
-          uniqueId: clientId,
+          uniqueId: prev?.uniqueId || clientUniqueId,
         } as Client;
         return {
           ...base,
@@ -640,18 +642,19 @@ export default function ClientPage() {
             )}
       
             {/* Chat Tab */}
-            {activeTab === "chat" && conversationId && (
+            {activeTab === "chat" && conversationId && client && clientUniqueId && (
               <div className="bg-white/80 backdrop-blur-2xl rounded-3xl shadow-2xl border border-gray-200/60 overflow-hidden p-6 sm:p-10 flex flex-col h-[500px]">
                 <Chat 
                   conversationId={conversationId} 
                   currentUser={{ 
-                    id: clientId, 
+                    id: clientUniqueId, 
                     email: client.email, 
                     name: client.name, 
                     role: 'user', 
                     createdAt: new Date(), 
                     updatedAt: new Date() 
                   }}
+                  portalToken={portalToken}
                   onNewMessage={handleNewMessage}
                 />
               </div>
@@ -661,12 +664,15 @@ export default function ClientPage() {
       </div>
 
       {/* Notifications client */}
-      <ClientNotification 
-        clientId={clientId}
-        conversationId={conversationId}
-        onNewMessage={handleNewMessage}
-        onPortalUpdate={handlePortalUpdate}
-      />
+      {clientUniqueId && (
+        <ClientNotification 
+          clientId={clientUniqueId}
+          portalToken={portalToken}
+          conversationId={conversationId}
+          onNewMessage={handleNewMessage}
+          onPortalUpdate={handlePortalUpdate}
+        />
+      )}
     </>
   );
 }

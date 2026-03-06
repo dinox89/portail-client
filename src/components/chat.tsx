@@ -26,10 +26,11 @@ interface User {
 interface ChatProps {
   conversationId: string;
   currentUser: User;
+  portalToken?: string;
   onNewMessage?: () => void;
 }
 
-export default function Chat({ conversationId, currentUser, onNewMessage }: ChatProps) {
+export default function Chat({ conversationId, currentUser, portalToken, onNewMessage }: ChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -69,6 +70,16 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
     const regex = /((?:https?:\/\/|www\.)[^\s]+|(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?:\/[^\s]*)?)/g;
     const parts: any[] = [];
     let lastIndex = 0;
+    const toSafeHref = (raw: string) => {
+      try {
+        const withProto = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+        const url = new URL(withProto);
+        if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+        return url.toString();
+      } catch {
+        return null;
+      }
+    };
     for (const match of content.matchAll(regex)) {
       const start = match.index || 0;
       if (start > lastIndex) parts.push(content.slice(lastIndex, start));
@@ -78,10 +89,12 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
       if (token.includes('@')) {
         parts.push(token + trailing);
       } else {
-        const href =
-          token.startsWith('http://') || token.startsWith('https://')
-            ? token
-            : `https://${token.startsWith('www.') ? token : token}`;
+        const href = toSafeHref(token);
+        if (!href) {
+          parts.push(token + trailing);
+          lastIndex = start + match[0].length;
+          continue;
+        }
         parts.push(
           <a
             key={start}
@@ -101,6 +114,12 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
     return parts;
   };
 
+  const withPortalToken = (url: string) => {
+    if (!portalToken) return url;
+    const joiner = url.includes("?") ? "&" : "?";
+    return `${url}${joiner}portalToken=${encodeURIComponent(portalToken)}`;
+  };
+
   // Request notification permission on mount
   useEffect(() => {
     if ("Notification" in window && Notification.permission === "default") {
@@ -118,7 +137,7 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
 
     const loadMessages = async () => {
       try {
-        const res = await fetch(`/api/conversations/${conversationId}/messages`);
+        const res = await fetch(withPortalToken(`/api/conversations/${conversationId}/messages`));
         if (res.ok) {
           const data = await res.json();
           const initial = Array.isArray(data) ? data : [];
@@ -142,7 +161,10 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
 
     const fetchToken = async () => {
       try {
-        const res = await fetch(`/api/realtime/token?userId=${currentUser.id}`);
+        const query = portalToken
+          ? `portalToken=${encodeURIComponent(portalToken)}`
+          : `userId=${encodeURIComponent(currentUser.id)}`;
+        const res = await fetch(`/api/realtime/token?${query}`);
         if (res.ok) {
           const data = await res.json();
           return data?.token || null;
@@ -207,13 +229,13 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
     };
     };
     setup();
-  }, [conversationId, currentUser?.id]);
+  }, [conversationId, currentUser?.id, portalToken]);
 
   useEffect(() => {
     if (!conversationId || !currentUser?.id) return;
     const t = window.setInterval(async () => {
       try {
-        const res = await fetch(`/api/conversations/${conversationId}/messages`);
+        const res = await fetch(withPortalToken(`/api/conversations/${conversationId}/messages`));
         if (!res.ok) return;
         const data = await res.json();
         if (!Array.isArray(data)) return;
@@ -230,7 +252,7 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
         if (hasNewOther) {
           onNewMessageRef.current?.();
           try {
-            await fetch(`/api/conversations/${conversationId}/mark-read`, {
+            await fetch(withPortalToken(`/api/conversations/${conversationId}/mark-read`), {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ userId: currentUser.id })
@@ -309,7 +331,7 @@ export default function Chat({ conversationId, currentUser, onNewMessage }: Chat
     if (!input.trim()) return;
 
     try {
-      const res = await fetch(`/api/conversations/${conversationId}/messages`, {
+      const res = await fetch(withPortalToken(`/api/conversations/${conversationId}/messages`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: input.trim(), senderId: currentUser.id }),

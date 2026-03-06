@@ -4,7 +4,19 @@ import { db } from '@/lib/db';
 // Next 15 requires awaiting dynamic params
 export async function GET(request: Request, { params }: { params: Promise<{ userId: string }> }) {
   try {
+    const { searchParams } = new URL(request.url);
+    const portalToken = searchParams.get('portalToken');
     const { userId } = await params;
+
+    if (portalToken) {
+      const clientPortal = await (db as any).clientPortal.findUnique({
+        where: { accessToken: portalToken },
+        select: { id: true },
+      });
+      if (!clientPortal?.id || clientPortal.id !== userId) {
+        return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
+      }
+    }
 
     const conversations = await db.conversation.findMany({
       where: {

@@ -58,7 +58,11 @@ export class SocketManager {
       let userId = socket.handshake.auth.userId as string | undefined;
       const token = socket.handshake.auth.token as string | undefined;
       const secret = process.env.REALTIME_JWT_SECRET;
-      if (token && secret) {
+      if (secret) {
+        if (!token) {
+          socket.disconnect();
+          return;
+        }
         try {
           const payload = jwt.verify(token, secret) as any;
           if (payload?.uid) userId = String(payload.uid);

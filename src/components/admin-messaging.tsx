@@ -48,6 +48,16 @@ export default function AdminMessaging() {
     const regex = /((?:https?:\/\/|www\.)[^\s]+|(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?:\/[^\s]*)?)/g;
     const parts: any[] = [];
     let lastIndex = 0;
+    const toSafeHref = (raw: string) => {
+      try {
+        const withProto = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+        const url = new URL(withProto);
+        if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+        return url.toString();
+      } catch {
+        return null;
+      }
+    };
     for (const match of content.matchAll(regex)) {
       const start = match.index || 0;
       if (start > lastIndex) parts.push(content.slice(lastIndex, start));
@@ -57,10 +67,12 @@ export default function AdminMessaging() {
       if (token.includes('@')) {
         parts.push(token + trailing);
       } else {
-        const href =
-          token.startsWith('http://') || token.startsWith('https://')
-            ? token
-            : `https://${token.startsWith('www.') ? token : token}`;
+        const href = toSafeHref(token);
+        if (!href) {
+          parts.push(token + trailing);
+          lastIndex = start + match[0].length;
+          continue;
+        }
         parts.push(
           <a
             key={start}

@@ -8,7 +8,26 @@ const prisma = db as any;
 // Next 15 requires awaiting dynamic params
 export async function GET(request: Request, { params }: { params: Promise<{ conversationId: string }> }) {
   try {
+    const { searchParams } = new URL(request.url);
+    const portalToken = searchParams.get('portalToken');
     const { conversationId } = await params;
+
+    if (portalToken) {
+      const clientPortal = await prisma.clientPortal.findUnique({
+        where: { accessToken: portalToken },
+        select: { id: true },
+      });
+      if (!clientPortal?.id) {
+        return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
+      }
+      const hasAccess = await prisma.conversation.findFirst({
+        where: { id: conversationId, users: { some: { id: clientPortal.id } } },
+        select: { id: true },
+      });
+      if (!hasAccess) {
+        return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
+      }
+    }
 
     const messages = await prisma.message.findMany({
       where: {
@@ -35,6 +54,8 @@ export async function POST(
   { params }: { params: Promise<{ conversationId: string }> }
 ) {
   try {
+    const { searchParams } = new URL(request.url);
+    const portalToken = searchParams.get('portalToken');
     const key = getClientKey(request);
     if (!rateLimiter.check(key)) {
       return NextResponse.json({ error: 'Trop de requêtes' }, { status: 429 });
@@ -44,6 +65,23 @@ export async function POST(
 
     if (!content || !senderId) {
       return NextResponse.json({ error: 'Contenu et senderId requis' }, { status: 400 });
+    }
+
+    if (portalToken) {
+      const clientPortal = await prisma.clientPortal.findUnique({
+        where: { accessToken: portalToken },
+        select: { id: true },
+      });
+      if (!clientPortal?.id || clientPortal.id !== senderId) {
+        return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
+      }
+      const hasAccess = await prisma.conversation.findFirst({
+        where: { id: conversationId, users: { some: { id: clientPortal.id } } },
+        select: { id: true },
+      });
+      if (!hasAccess) {
+        return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
+      }
     }
 
     // Créer le nouveau message

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getIO } from '@/lib/socket';
 import { rateLimiter, getClientKey } from '@/lib/rateLimit';
+import { randomUUID } from 'crypto';
 
 export async function POST(request: Request) {
   try {
@@ -39,6 +40,17 @@ export async function POST(request: Request) {
         email,
         progression,
         project,
+      },
+      select: {
+        id: true,
+        accessToken: true,
+        name: true,
+        contact: true,
+        email: true,
+        progression: true,
+        project: true,
+        createdAt: true,
+        updatedAt: true,
       },
     });
 
@@ -117,6 +129,39 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Erreur suppression client portal:', error);
+    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const body = await request.json().catch(() => null);
+    const uniqueId = body?.uniqueId as string | undefined;
+
+    if (!uniqueId) {
+      return NextResponse.json({ error: 'uniqueId requis' }, { status: 400 });
+    }
+
+    const newToken = randomUUID();
+    const client = await (db as any).clientPortal.update({
+      where: { id: uniqueId },
+      data: { accessToken: newToken },
+      select: {
+        id: true,
+        accessToken: true,
+        name: true,
+        contact: true,
+        email: true,
+        progression: true,
+        project: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return NextResponse.json(client);
+  } catch (error) {
+    console.error('Erreur régénération lien portal:', error);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
   }
 }

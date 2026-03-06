@@ -46,6 +46,7 @@ model Message {
 // Persisted client portal data to make shared links work across devices
 model ClientPortal {
   id          String   @id // Use the uniqueId generated for the client
+  accessToken String   @unique @default(uuid()) @db.Uuid
   name        String
   contact     String
   email       String
