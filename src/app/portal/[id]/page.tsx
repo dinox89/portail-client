@@ -96,11 +96,14 @@ const normalizeClient = (client: any): Client => ({
 export default function ClientPage() {
   const params = useParams();
   const portalToken = params.id as string;
+  const adminUserId = process.env.NEXT_PUBLIC_ADMIN_USER_ID ?? 'admin-user-id';
   const [activeTab, setActiveTab] = useState("introduction");
   const [client, setClient] = useState<Client | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [isConversationLoading, setIsConversationLoading] = useState(false);
+  const [conversationError, setConversationError] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isIntroductionPlaying, setIsIntroductionPlaying] = useState(false);
   const [isIntroductionReady, setIsIntroductionReady] = useState(false);
@@ -189,31 +192,39 @@ export default function ClientPage() {
     }
   }, [portalToken]);
 
+  const loadConversation = async (userId: string) => {
+    setIsConversationLoading(true);
+    setConversationError(null);
+
+    try {
+      const res = await fetch(`/api/conversations?portalToken=${encodeURIComponent(portalToken)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId1: userId, userId2: adminUserId }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        setConversationError(typeof errorData?.error === 'string' ? errorData.error : 'Impossible de charger le chat');
+        return;
+      }
+
+      const data = await res.json();
+      setConversationId(data.id);
+      setConversationError(null);
+    } catch (error) {
+      console.error('Error fetching conversation:', error);
+      setConversationError('Impossible de charger le chat');
+    } finally {
+      setIsConversationLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (clientUniqueId) {
-      const fetchConversation = async () => {
-        try {
-          const res = await fetch(`/api/conversations?portalToken=${encodeURIComponent(portalToken)}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId1: clientUniqueId, userId2: 'admin-user-id' }),
-          });
-          
-          if (!res.ok) {
-            const errorData = await res.json();
-            console.error('API Error:', errorData);
-            return;
-          }
-          
-          const data = await res.json();
-          setConversationId(data.id);
-        } catch (error) {
-          console.error('Error fetching conversation:', error);
-        }
-      };
-      fetchConversation();
+      void loadConversation(clientUniqueId);
     }
-  }, [clientUniqueId]);
+  }, [clientUniqueId, portalToken, adminUserId]);
 
   // Seed initial unread count from server messages on load
   useEffect(() => {
@@ -281,7 +292,7 @@ export default function ClientPage() {
     ? `https://i.ytimg.com/vi/${introductionVideoId}/maxresdefault.jpg`
     : "";
   const introductionEmbedUrl = introductionVideoId
-    ? `https://www.youtube-nocookie.com/embed/${introductionVideoId}?autoplay=1&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&controls=1&fs=1&cc_load_policy=0`
+    ? `https://www.youtube-nocookie.com/embed/${introductionVideoId}?autoplay=1&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&controls=0&fs=0&disablekb=1&cc_load_policy=0`
     : "";
 
   useEffect(() => {
@@ -578,9 +589,6 @@ export default function ClientPage() {
                   <div className="p-6 sm:p-8">
                     {introductionVideoId ? (
                       <div className="relative overflow-hidden rounded-[28px] border border-gray-200 bg-slate-950 shadow-[0_30px_80px_rgba(15,23,42,0.28)]">
-                        <div className="absolute inset-x-0 top-0 z-20 h-1.5 overflow-hidden bg-white/10">
-                          <div className="h-full w-1/3 rounded-full bg-gradient-to-r from-red-500 via-orange-300 to-red-600 animate-[gradient_2.2s_ease-in-out_infinite]" />
-                        </div>
                         <div className="relative pt-[56.25%]">
                           {!isIntroductionPlaying ? (
                             <button
@@ -605,29 +613,15 @@ export default function ClientPage() {
                                   }
                                 }}
                               />
-                              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(15,23,42,0.15),rgba(15,23,42,0.88)_72%)]" />
-                              <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-slate-950 via-slate-950/75 to-transparent" />
-                              <div className="relative z-10 flex flex-col items-center gap-4 px-6 text-center text-white">
-                                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-red-600 shadow-[0_18px_40px_rgba(220,38,38,0.45)] transition-transform duration-300 group-hover:scale-105">
-                                  <PlayCircle size={40} fill="currentColor" />
-                                </div>
-                                <div>
-                                  <p className="text-xl font-semibold sm:text-2xl">Lire la vidéo d&apos;introduction</p>
-                                  <p className="mt-2 text-sm text-white/75 sm:text-base">
-                                    Le lecteur YouTube reste masqué tant que vous ne lancez pas la vidéo, pour économiser des données.
-                                  </p>
-                                </div>
-                              </div>
+                              <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.08),rgba(15,23,42,0.36))] transition duration-500 group-hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.03),rgba(15,23,42,0.24))]" />
                             </button>
                           ) : (
                             <>
                               {!isIntroductionReady && (
-                                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-slate-950 text-white">
-                                  <div className="h-12 w-12 rounded-full border-4 border-white/20 border-t-red-500 animate-spin" />
-                                  <div className="w-56 overflow-hidden rounded-full bg-white/10">
-                                    <div className="h-1.5 w-1/2 rounded-full bg-gradient-to-r from-red-500 via-orange-300 to-red-600 animate-[gradient_1.8s_ease-in-out_infinite]" />
+                                <div className="absolute inset-0 z-10 flex items-end bg-[linear-gradient(180deg,rgba(15,23,42,0.08),rgba(15,23,42,0.62))] px-6 pb-6">
+                                  <div className="w-full overflow-hidden rounded-full bg-white/15">
+                                    <div className="h-1.5 w-1/3 rounded-full bg-gradient-to-r from-white via-slate-200 to-white animate-[gradient_1.8s_ease-in-out_infinite]" />
                                   </div>
-                                  <p className="text-sm text-white/75">Préparation de la lecture…</p>
                                 </div>
                               )}
                               <iframe
@@ -827,6 +821,30 @@ export default function ClientPage() {
                     portalToken={portalToken}
                     onNewMessage={handleNewMessage}
                   />
+                ) : isConversationLoading ? (
+                  <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
+                    <div className="h-12 w-12 rounded-full border-4 border-slate-200 border-t-slate-700 animate-spin" />
+                    <div>
+                      <p className="text-lg font-semibold text-gray-900">Chargement du chat…</p>
+                      <p className="mt-1 text-sm text-gray-600">
+                        La conversation se prépare, elle va s&apos;afficher automatiquement.
+                      </p>
+                    </div>
+                  </div>
+                ) : conversationError ? (
+                  <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
+                    <div>
+                      <p className="text-lg font-semibold text-gray-900">Le chat n&apos;a pas pu se lancer</p>
+                      <p className="mt-1 text-sm text-gray-600">{conversationError}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void loadConversation(clientUniqueId)}
+                      className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-700"
+                    >
+                      Réessayer
+                    </button>
+                  </div>
                 ) : (
                   <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
                     <div className="h-12 w-12 rounded-full border-4 border-slate-200 border-t-slate-700 animate-spin" />
