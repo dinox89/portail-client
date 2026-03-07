@@ -2,7 +2,7 @@
 
 import { useRef, useState, useEffect } from "react";
 import { useParams } from "next/navigation";
-import { Users, Calendar, FileText, Download, ExternalLink, CheckCircle, Clock, AlertCircle, Image as ImageIcon, MessageSquare } from "lucide-react";
+import { Download, CheckCircle, Clock, AlertCircle, Image as ImageIcon, MessageSquare } from "lucide-react";
 import Chat from "@/components/chat";
 import { ClientNotification } from "@/components/client-notification";
 
@@ -45,6 +45,54 @@ interface Client {
   project: Project;
 }
 
+const defaultProjectDates = () => {
+  const startDate = new Date().toISOString().split('T')[0];
+  const endDate = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  return { startDate, endDate };
+};
+
+const normalizeProject = (project: Partial<Project> | null | undefined): Project => {
+  const { startDate, endDate } = defaultProjectDates();
+  const rawSteps = Array.isArray(project?.steps) ? project.steps : [];
+  const rawFiles = Array.isArray(project?.files) ? project.files : [];
+
+  return {
+    name: typeof project?.name === 'string' ? project.name : '',
+    description: typeof project?.description === 'string' ? project.description : '',
+    videoUrl: typeof project?.videoUrl === 'string' ? project.videoUrl.trim() : '',
+    startDate: typeof project?.startDate === 'string' ? project.startDate : startDate,
+    endDate: typeof project?.endDate === 'string' ? project.endDate : endDate,
+    status: typeof project?.status === 'string' ? project.status : '',
+    steps: rawSteps.map((step, index) => ({
+      id: typeof step?.id === 'number' ? step.id : Date.now() + index,
+      name: typeof step?.name === 'string' ? step.name : '',
+      date: typeof step?.date === 'string' ? step.date : '',
+      status: step?.status === 'Terminé' ? 'Terminé' : 'En cours',
+    })),
+    files: rawFiles.map((file, index) => ({
+      id: typeof file?.id === 'number' ? file.id : Date.now() + index,
+      name: typeof file?.name === 'string' ? file.name : '',
+      date: typeof file?.date === 'string' ? file.date : startDate,
+      size: typeof file?.size === 'string' ? file.size : '-',
+      status: file?.status === 'completed' || file?.status === 'in-progress' ? file.status : 'pending',
+      fileData: typeof file?.fileData === 'string' ? file.fileData : undefined,
+      fileType: typeof file?.fileType === 'string' ? file.fileType : undefined,
+    })),
+  };
+};
+
+const normalizeClient = (client: any): Client => ({
+  id: 0,
+  uniqueId: String(client?.uniqueId ?? client?.id ?? ''),
+  accessToken: typeof client?.accessToken === 'string' ? client.accessToken : undefined,
+  name: typeof client?.name === 'string' ? client.name : '',
+  contact: typeof client?.contact === 'string' ? client.contact : '',
+  email: typeof client?.email === 'string' ? client.email : '',
+  progression: Number.isFinite(Number(client?.progression)) ? Math.min(100, Math.max(0, Number(client.progression))) : 0,
+  project: normalizeProject(client?.project),
+});
+
 export default function ClientPage() {
   const params = useParams();
   const portalToken = params.id as string;
@@ -52,20 +100,26 @@ export default function ClientPage() {
   const [client, setClient] = useState<Client | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const chatEndRef = useRef(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const defaultTitleRef = useRef<string>('');
   const clientUniqueId = client?.uniqueId || '';
   const getYoutubeId = (url: string) => {
     try {
-      const parsed = new URL(url);
+      const candidateUrl = url.trim().startsWith('http') ? url.trim() : `https://${url.trim()}`;
+      const parsed = new URL(candidateUrl);
       if (parsed.hostname === "youtu.be") {
-        return parsed.pathname.replace("/", "");
+        return parsed.pathname.replace("/", "").split("/")[0] || "";
       }
       if (parsed.hostname.includes("youtube.com")) {
         if (parsed.pathname.startsWith("/embed/")) {
           return parsed.pathname.split("/embed/")[1] || "";
+        }
+        if (parsed.pathname.startsWith("/shorts/")) {
+          return parsed.pathname.split("/shorts/")[1]?.split("/")[0] || "";
+        }
+        if (parsed.pathname.startsWith("/live/")) {
+          return parsed.pathname.split("/live/")[1]?.split("/")[0] || "";
         }
         return parsed.searchParams.get("v") || "";
       }
@@ -80,15 +134,7 @@ export default function ClientPage() {
         const res = await fetch(`/api/portal/${portalToken}`, { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
-          setClient({
-            id: 0,
-            uniqueId: data.id,
-            name: data.name,
-            contact: data.contact,
-            email: data.email,
-            progression: data.progression ?? 0,
-            project: data.project,
-          });
+          setClient(normalizeClient(data));
           setError(false);
         } else {
           const fallbackLoaded = (() => {
@@ -98,7 +144,7 @@ export default function ClientPage() {
               const clients: Client[] = JSON.parse(savedData);
               const foundClient = clients.find(c => c.accessToken === portalToken);
               if (foundClient) {
-                setClient(foundClient);
+                setClient(normalizeClient(foundClient));
                 setError(false);
                 return true;
               }
@@ -119,7 +165,7 @@ export default function ClientPage() {
             const clients: Client[] = JSON.parse(savedData);
             const foundClient = clients.find(c => c.accessToken === portalToken);
             if (foundClient) {
-              setClient(foundClient);
+              setClient(normalizeClient(foundClient));
               setError(false);
             } else {
               setError(true);
@@ -258,9 +304,7 @@ export default function ClientPage() {
           contact: updated?.contact ?? prev?.contact ?? '',
           email: updated?.email ?? prev?.email ?? '',
           progression: (updated?.progression ?? prev?.progression ?? 0) as number,
-          project: (updated?.project ?? prev?.project ?? {
-            name: '', description: '', videoUrl: '', startDate: '', endDate: '', status: '', steps: [], files: []
-          }) as Project,
+          project: normalizeProject(updated?.project ?? prev?.project),
         };
       });
     } catch (err) {

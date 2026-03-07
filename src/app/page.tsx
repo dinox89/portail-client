@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, Plus, Search, Edit2, Trash2, X, Save, Building2, ExternalLink, Copy, Check, Upload, FileText, Download, Lock, LogOut, Image as ImageIcon, MessageSquare, RefreshCcw } from "lucide-react";
+import { Users, Plus, Search, Edit2, Trash2, X, Save, Building2, ExternalLink, Copy, Check, Upload, Download, Lock, LogOut, Image as ImageIcon, MessageSquare, RefreshCcw } from "lucide-react";
 import Chat from "@/components/chat";
 import AdminMessaging from '@/components/admin-messaging';
 import { io } from 'socket.io-client';
@@ -55,6 +55,128 @@ interface Client {
   project: Project;
 }
 
+const defaultProjectDates = () => {
+  const startDate = new Date().toISOString().split('T')[0];
+  const endDate = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  return { startDate, endDate };
+};
+
+const createEmptyProject = (): Project => {
+  const { startDate, endDate } = defaultProjectDates();
+
+  return {
+    name: '',
+    description: '',
+    videoUrl: '',
+    startDate,
+    endDate,
+    status: '',
+    steps: [],
+    files: [],
+  };
+};
+
+const clampProgression = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return 0;
+  }
+
+  return Math.min(100, Math.max(0, Math.round(parsed)));
+};
+
+const createLocalId = (value: string) => {
+  if (!value) {
+    return Date.now();
+  }
+
+  return Array.from(value).reduce((hash, char) => {
+    return ((hash * 31) + char.charCodeAt(0)) >>> 0;
+  }, 7) || Date.now();
+};
+
+const normalizeProject = (project: Partial<Project> | null | undefined): Project => {
+  const fallback = createEmptyProject();
+  const rawSteps = Array.isArray(project?.steps) ? project.steps : [];
+  const rawFiles = Array.isArray(project?.files) ? project.files : [];
+
+  return {
+    ...fallback,
+    ...project,
+    videoUrl: typeof project?.videoUrl === 'string' ? project.videoUrl.trim() : '',
+    steps: rawSteps.map((step, index) => ({
+      id: typeof step?.id === 'number' ? step.id : Date.now() + index,
+      name: typeof step?.name === 'string' ? step.name : '',
+      date: typeof step?.date === 'string' ? step.date : '',
+      status: step?.status === 'Terminé' ? 'Terminé' : 'En cours',
+    })),
+    files: rawFiles.map((file, index) => ({
+      id: typeof file?.id === 'number' ? file.id : Date.now() + index,
+      name: typeof file?.name === 'string' ? file.name : '',
+      date: typeof file?.date === 'string' ? file.date : fallback.startDate,
+      size: typeof file?.size === 'string' ? file.size : '-',
+      status: file?.status === 'completed' || file?.status === 'in-progress' ? file.status : 'pending',
+      fileData: typeof file?.fileData === 'string' ? file.fileData : undefined,
+      fileType: typeof file?.fileType === 'string' ? file.fileType : undefined,
+    })),
+  };
+};
+
+const normalizeClient = (client: Partial<Client> & { project?: Partial<Project> | null; id?: unknown; uniqueId?: string }): Client => {
+  const uniqueId = String(client.uniqueId ?? client.id ?? '');
+
+  return {
+    id: typeof client.id === 'number' ? client.id : createLocalId(uniqueId),
+    uniqueId,
+    accessToken: typeof client.accessToken === 'string' ? client.accessToken : undefined,
+    name: typeof client.name === 'string' ? client.name : '',
+    contact: typeof client.contact === 'string' ? client.contact : '',
+    email: typeof client.email === 'string' ? client.email : '',
+    progression: clampProgression(client.progression),
+    project: normalizeProject(client.project),
+  };
+};
+
+const readStoredClients = () => {
+  if (typeof window === 'undefined') {
+    return [];
+  }
+
+  const savedData = window.localStorage.getItem('clientData');
+  if (!savedData) {
+    return [];
+  }
+
+  try {
+    const parsedData = JSON.parse(savedData);
+    if (!Array.isArray(parsedData)) {
+      return [];
+    }
+
+    return parsedData.map((client) => normalizeClient(client));
+  } catch (error) {
+    console.error('Erreur lors du chargement des données:', error);
+    return [];
+  }
+};
+
+const mergeClients = (primary: Client[], secondary: Client[]) => {
+  const merged = new Map<string, Client>();
+
+  primary.forEach((client) => {
+    merged.set(client.uniqueId, normalizeClient(client));
+  });
+
+  secondary.forEach((client) => {
+    if (!merged.has(client.uniqueId)) {
+      merged.set(client.uniqueId, normalizeClient(client));
+    }
+  });
+
+  return Array.from(merged.values());
+};
+
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(true);
   const [password, setPassword] = useState('');
@@ -83,21 +205,41 @@ const App: React.FC = () => {
   const [unreadByClient, setUnreadByClient] = useState<Record<string, number>>({});
   const [conversationClientMap, setConversationClientMap] = useState<Record<string, string>>({});
   const socketRef = useRef<any>(null);
+  const editingProjectRef = useRef<Client | null>(null);
   const defaultTitleRef = useRef<string>('');
   const baselineUnreadRef = useRef<number>(0);
   const adminInitRef = useRef<boolean>(false);
 
-  // Charger les données sauvegardées au démarrage
   useEffect(() => {
-    const savedData = localStorage.getItem('clientData');
-    if (savedData) {
+    let cancelled = false;
+
+    const loadClients = async () => {
+      const storedClients = readStoredClients();
+      let nextClients = storedClients;
+
       try {
-        const parsedData = JSON.parse(savedData);
-        setClients(parsedData);
+        const res = await fetch('/api/portal', { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          const remoteClients = Array.isArray(data)
+            ? data.map((client) => normalizeClient({ ...client, uniqueId: client.id }))
+            : [];
+          nextClients = mergeClients(remoteClients, storedClients);
+        }
       } catch (error) {
-        console.error('Erreur lors du chargement des données:', error);
+        console.error('Erreur lors du chargement des clients depuis le serveur:', error);
       }
-    }
+
+      if (!cancelled) {
+        setClients(nextClients);
+      }
+    };
+
+    void loadClients();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -126,6 +268,10 @@ const App: React.FC = () => {
       localStorage.removeItem('clientData');
     }
   }, [clients]);
+
+  useEffect(() => {
+    editingProjectRef.current = editingProject;
+  }, [editingProject]);
 
   // Charger les conversations admin et initialiser les compteurs par client
   useEffect(() => {
@@ -290,35 +436,69 @@ const App: React.FC = () => {
     return `${window.location.origin}/portal/${accessToken}`;
   };
 
-  // Persister un client dans la base pour synchroniser le portail
+  const syncClientState = (client: Client) => {
+    const normalizedClient = normalizeClient(client);
+
+    setClients((prev) => {
+      const exists = prev.some((current) => current.uniqueId === normalizedClient.uniqueId);
+      if (!exists) {
+        return [normalizedClient, ...prev];
+      }
+
+      return prev.map((current) => current.uniqueId === normalizedClient.uniqueId ? normalizedClient : current);
+    });
+    setSelectedClient((prev) => prev?.uniqueId === normalizedClient.uniqueId ? normalizedClient : prev);
+  };
+
+  const updateEditingProject = (updater: (current: Client) => Client) => {
+    const current = editingProjectRef.current;
+    if (!current) {
+      return;
+    }
+
+    const next = normalizeClient(updater(current));
+    editingProjectRef.current = next;
+    setEditingProject(next);
+    syncClientState(next);
+  };
+
   const persistClientPortal = async (client: Client) => {
+    const normalizedClient = normalizeClient(client);
+
     try {
       const res = await fetch('/api/portal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          uniqueId: client.uniqueId,
-          name: client.name,
-          contact: client.contact,
-          email: client.email,
-          progression: client.progression,
-          project: client.project,
+          uniqueId: normalizedClient.uniqueId,
+          name: normalizedClient.name,
+          contact: normalizedClient.contact,
+          email: normalizedClient.email,
+          progression: normalizedClient.progression,
+          project: normalizedClient.project,
         }),
       });
-      if (!res.ok) return client.accessToken || null;
-      const data = await res.json();
-      const accessToken = data?.accessToken as string | undefined;
-      if (accessToken) {
-        setClients(prev => prev.map(c => c.uniqueId === client.uniqueId ? { ...c, accessToken } : c));
-        if (editingProject?.uniqueId === client.uniqueId) {
-          setEditingProject({ ...editingProject, accessToken });
-        }
+      if (!res.ok) {
+        return normalizedClient.accessToken || null;
       }
-      return accessToken || client.accessToken || null;
+
+      const data = await res.json();
+      const savedClient = normalizeClient({
+        ...normalizedClient,
+        ...data,
+        uniqueId: data?.id ?? normalizedClient.uniqueId,
+        accessToken: data?.accessToken ?? normalizedClient.accessToken,
+      });
+
+      syncClientState(savedClient);
+      setEditingProject((prev) => prev?.uniqueId === savedClient.uniqueId ? savedClient : prev);
+
+      return savedClient.accessToken || normalizedClient.accessToken || null;
     } catch (e) {
       console.error('Erreur de persistance ClientPortal:', e);
     }
-    return client.accessToken || null;
+
+    return normalizedClient.accessToken || null;
   };
 
   const copyPortalLink = async (client: Client) => {
@@ -339,13 +519,12 @@ const App: React.FC = () => {
       });
       if (!res.ok) return;
       const data = await res.json();
-      const accessToken = data?.accessToken as string | undefined;
-      if (accessToken) {
-        setClients(prev => prev.map(c => c.uniqueId === client.uniqueId ? { ...c, accessToken } : c));
-        if (editingProject?.uniqueId === client.uniqueId) {
-          setEditingProject({ ...editingProject, accessToken });
-        }
-      }
+      const updatedClient = normalizeClient({
+        ...client,
+        accessToken: data?.accessToken ?? client.accessToken,
+      });
+      syncClientState(updatedClient);
+      setEditingProject((prev) => prev?.uniqueId === updatedClient.uniqueId ? updatedClient : prev);
     } catch {}
   };
 
@@ -394,47 +573,31 @@ const App: React.FC = () => {
     }
   };
 
-  const openAdminMessaging = () => {
-    setShowAdminMessaging(true);
-  };
-
-  const handleNewMessageCount = (count: number) => {
-    setNewMessageCount(count);
-  };
-
   const handleAddClient = () => {
     if (newClient.name && newClient.contact && newClient.email) {
       const uniqueId = generateUniqueId();
-      const client: Client = {
-        id: Date.now(),
+      const client = normalizeClient({
+        id: createLocalId(uniqueId),
         uniqueId: uniqueId,
         ...newClient,
         progression: 0,
-        project: {
-          name: '',
-          description: '',
-          videoUrl: '',
-          startDate: new Date().toISOString().split('T')[0],
-          endDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          status: '',
-          steps: [],
-          files: []
-        }
-      };
-      setClients([...clients, client]);
+        project: createEmptyProject(),
+      });
+
+      syncClientState(client);
       setNewClient({ name: '', contact: '', email: '' });
       setShowNewClientModal(false);
       setSelectedClient(client);
       setEditingProject(client);
+      void persistClientPortal(client);
     }
   };
 
   const handleDeleteClient = async (client: Client) => {
-    const id = client.id;
     const clientUniqueId = client.uniqueId;
 
-    setClients(prev => prev.filter(c => c.id !== id));
-    if (selectedClient?.id === id) {
+    setClients(prev => prev.filter(c => c.uniqueId !== clientUniqueId));
+    if (selectedClient?.uniqueId === clientUniqueId) {
       setSelectedClient(null);
       setEditingProject(null);
     }
@@ -450,76 +613,62 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSaveProject = () => {
+  const handleSaveProject = async () => {
     if (editingProject) {
-      setClients(clients.map(c => c.id === editingProject.id ? editingProject : c));
-      setSelectedClient(editingProject);
+      const currentProject = normalizeClient(editingProject);
+      syncClientState(currentProject);
+      setEditingProject(currentProject);
       setShowSuccessMessage(true);
       
       console.log('🔄 Données sauvegardées:', {
-        clientId: editingProject.uniqueId,
-        projectData: editingProject.project,
-        progression: editingProject.progression
+        clientId: currentProject.uniqueId,
+        projectData: currentProject.project,
+        progression: currentProject.progression
       });
-      // Persister immédiatement côté serveur pour synchroniser le portail
-      void persistClientPortal(editingProject);
+
+      await persistClientPortal(currentProject);
       
       setTimeout(() => setShowSuccessMessage(false), 3000);
     }
   };
 
-  // Corrige l’erreur: bouton Enregistrer appelle une fonction inexistante
-  const handleUpdateProject = () => {
-    handleSaveProject();
-    // Fermer l’éditeur après enregistrement pour éviter des états incohérents
+  const handleUpdateProject = async () => {
+    await handleSaveProject();
     setEditingProject(null);
   };
 
   const handleProgressionChange = (value: string) => {
-    if (editingProject) {
-      const next = { ...editingProject, progression: parseInt(value) };
-      setEditingProject(next);
-      void persistClientPortal(next);
-    }
+    const nextProgression = clampProgression(value);
+    updateEditingProject((current) => ({ ...current, progression: nextProgression }));
   };
 
   const handleAddStep = () => {
     if (newStep.name && newStep.date && editingProject) {
       const step: Step = { id: Date.now(), ...newStep };
-      const updated = {
-        ...editingProject,
-        project: { ...editingProject.project, steps: [...editingProject.project.steps, step] }
-      };
-      setEditingProject(updated);
+      updateEditingProject((current) => ({
+        ...current,
+        project: { ...current.project, steps: [...current.project.steps, step] }
+      }));
       setNewStep({ name: '', date: '', status: 'En cours' });
       setShowAddStepModal(false);
-      void persistClientPortal(updated);
     }
   };
 
   const handleDeleteStep = (stepId: number) => {
-    if (editingProject) {
-      const updated = {
-        ...editingProject,
-        project: { ...editingProject.project, steps: editingProject.project.steps.filter(s => s.id !== stepId) }
-      };
-      setEditingProject(updated);
-      void persistClientPortal(updated);
-    }
+    updateEditingProject((current) => ({
+      ...current,
+      project: { ...current.project, steps: current.project.steps.filter((step) => step.id !== stepId) }
+    }));
   };
 
   const handleUpdateStep = (stepId: number, field: keyof Step, value: string) => {
-    if (editingProject) {
-      const updated = {
-        ...editingProject,
-        project: {
-          ...editingProject.project,
-          steps: editingProject.project.steps.map(s => s.id === stepId ? { ...s, [field]: value } : s)
-        }
-      };
-      setEditingProject(updated);
-      void persistClientPortal(updated);
-    }
+    updateEditingProject((current) => ({
+      ...current,
+      project: {
+        ...current.project,
+        steps: current.project.steps.map((step) => step.id === stepId ? { ...step, [field]: value } : step)
+      }
+    }));
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -546,7 +695,6 @@ const App: React.FC = () => {
   const handleAddFile = async () => {
     if (newFile.name && uploadingFile && editingProject) {
       try {
-        // Convertir le fichier en base64 pour le stockage
         const base64Data = await fileToBase64(uploadingFile);
         
         const file: ProjectFile = {
@@ -559,18 +707,16 @@ const App: React.FC = () => {
           fileType: uploadingFile.type
         };
         
-        const updated = {
-          ...editingProject,
-          project: { ...editingProject.project, files: [...(editingProject.project.files || []), file] }
-        };
-        setEditingProject(updated);
+        updateEditingProject((current) => ({
+          ...current,
+          project: { ...current.project, files: [...current.project.files, file] }
+        }));
         
         setNewFile({ name: '', date: new Date().toISOString().split('T')[0], status: 'completed', size: '' });
         setUploadingFile(null);
         setShowAddFileModal(false);
         
         console.log('📤 Fichier PNG ajouté et stocké:', file);
-        void persistClientPortal(updated);
       } catch (error) {
         console.error('Erreur lors du traitement du fichier:', error);
         alert('Erreur lors du traitement du fichier');
@@ -588,28 +734,20 @@ const App: React.FC = () => {
   };
 
   const handleDeleteFile = (fileId: number) => {
-    if (editingProject) {
-      const updated = {
-        ...editingProject,
-        project: { ...editingProject.project, files: editingProject.project.files.filter(f => f.id !== fileId) }
-      };
-      setEditingProject(updated);
-      void persistClientPortal(updated);
-    }
+    updateEditingProject((current) => ({
+      ...current,
+      project: { ...current.project, files: current.project.files.filter((file) => file.id !== fileId) }
+    }));
   };
 
   const handleUpdateFile = (fileId: number, field: keyof ProjectFile, value: string) => {
-    if (editingProject) {
-      const updated = {
-        ...editingProject,
-        project: {
-          ...editingProject.project,
-          files: editingProject.project.files.map(f => f.id === fileId ? { ...f, [field]: value } : f)
-        }
-      };
-      setEditingProject(updated);
-      void persistClientPortal(updated);
-    }
+    updateEditingProject((current) => ({
+      ...current,
+      project: {
+        ...current.project,
+        files: current.project.files.map((file) => file.id === fileId ? { ...file, [field]: value } : file)
+      }
+    }));
   };
 
   const downloadFile = (file: ProjectFile) => {
@@ -772,10 +910,10 @@ const App: React.FC = () => {
               <input
                 type="text"
                 value={editingProject.project.name}
-                onChange={(e) => setEditingProject({
-                  ...editingProject,
-                  project: { ...editingProject.project, name: e.target.value }
-                })}
+                onChange={(e) => updateEditingProject((current) => ({
+                  ...current,
+                  project: { ...current.project, name: e.target.value }
+                }))}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg"
               />
             </div>
@@ -785,10 +923,24 @@ const App: React.FC = () => {
               <input
                 type="text"
                 value={editingProject.project.description}
-                onChange={(e) => setEditingProject({
-                  ...editingProject,
-                  project: { ...editingProject.project, description: e.target.value }
-                })}
+                onChange={(e) => updateEditingProject((current) => ({
+                  ...current,
+                  project: { ...current.project, description: e.target.value }
+                }))}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+              />
+            </div>
+
+            <div className="mb-6">
+              <label className="block text-sm font-medium mb-2">Lien vidéo YouTube</label>
+              <input
+                type="url"
+                value={editingProject.project.videoUrl || ''}
+                onChange={(e) => updateEditingProject((current) => ({
+                  ...current,
+                  project: { ...current.project, videoUrl: e.target.value }
+                }))}
+                placeholder="https://www.youtube.com/watch?v=..."
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg"
               />
             </div>
@@ -799,10 +951,10 @@ const App: React.FC = () => {
                 <input
                   type="date"
                   value={editingProject.project.startDate}
-                  onChange={(e) => setEditingProject({
-                    ...editingProject,
-                    project: { ...editingProject.project, startDate: e.target.value }
-                  })}
+                  onChange={(e) => updateEditingProject((current) => ({
+                    ...current,
+                    project: { ...current.project, startDate: e.target.value }
+                  }))}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -811,10 +963,10 @@ const App: React.FC = () => {
                 <input
                   type="date"
                   value={editingProject.project.endDate}
-                  onChange={(e) => setEditingProject({
-                    ...editingProject,
-                    project: { ...editingProject.project, endDate: e.target.value }
-                  })}
+                  onChange={(e) => updateEditingProject((current) => ({
+                    ...current,
+                    project: { ...current.project, endDate: e.target.value }
+                  }))}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -825,10 +977,10 @@ const App: React.FC = () => {
               <input
                 type="text"
                 value={editingProject.project.status}
-                onChange={(e) => setEditingProject({
-                  ...editingProject,
-                  project: { ...editingProject.project, status: e.target.value }
-                })}
+                onChange={(e) => updateEditingProject((current) => ({
+                  ...current,
+                  project: { ...current.project, status: e.target.value }
+                }))}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg"
               />
             </div>
@@ -1239,14 +1391,15 @@ const App: React.FC = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredClients.map(client => (
-            <div key={client.id} className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow">
+            <div key={client.uniqueId} className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between mb-4">
                 <h3 className="text-xl font-bold">{client.name}</h3>
                 <div className="flex gap-2">
                   <button
                     onClick={() => {
-                      setSelectedClient(client);
-                      setEditingProject(client);
+                      const normalizedClient = normalizeClient(client);
+                      setSelectedClient(normalizedClient);
+                      setEditingProject(normalizedClient);
                     }}
                     className="text-blue-600 hover:text-blue-700"
                     title="Modifier le projet"

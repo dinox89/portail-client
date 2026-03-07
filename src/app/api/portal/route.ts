@@ -4,6 +4,30 @@ import { getIO } from '@/lib/socket';
 import { rateLimiter, getClientKey } from '@/lib/rateLimit';
 import { randomUUID } from 'crypto';
 
+export async function GET() {
+  try {
+    const clients = await (db as any).clientPortal.findMany({
+      orderBy: { updatedAt: 'desc' },
+      select: {
+        id: true,
+        accessToken: true,
+        name: true,
+        contact: true,
+        email: true,
+        progression: true,
+        project: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return NextResponse.json(clients);
+  } catch (error) {
+    console.error('Erreur récupération clients portal:', error);
+    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const key = getClientKey(request);
