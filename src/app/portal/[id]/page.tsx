@@ -2,7 +2,7 @@
 
 import { useRef, useState, useEffect } from "react";
 import { useParams } from "next/navigation";
-import { Download, CheckCircle, Clock, AlertCircle, Image as ImageIcon, MessageSquare, PlayCircle, ExternalLink } from "lucide-react";
+import { Download, CheckCircle, Clock, AlertCircle, Image as ImageIcon, MessageSquare, PlayCircle } from "lucide-react";
 import Chat from "@/components/chat";
 import { ClientNotification } from "@/components/client-notification";
 
@@ -575,33 +575,6 @@ export default function ClientPage() {
             {activeTab === "introduction" && (
               <div className="space-y-8">
                 <div className="bg-white/80 backdrop-blur-2xl rounded-3xl shadow-2xl border border-gray-200/60 overflow-hidden">
-                  <div className="p-6 sm:p-10 border-b border-gray-200/60 bg-gradient-to-br from-red-50/80 via-white to-slate-50/80">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                      <div>
-                        <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2 flex items-center gap-3">
-                          <div className="w-11 h-11 bg-red-100 rounded-2xl flex items-center justify-center shadow-sm">
-                            <PlayCircle className="text-red-600" size={24} />
-                          </div>
-                          Introduction
-                        </h2>
-                        <p className="text-gray-600 text-base sm:text-lg">
-                          Une vidéo d&apos;accueil séparée du reste du projet, chargée uniquement quand vous la lancez.
-                        </p>
-                      </div>
-                      {introductionVideoUrl && (
-                        <a
-                          href={introductionVideoUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-2 self-start rounded-2xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm hover:border-red-200 hover:text-red-600"
-                        >
-                          <ExternalLink size={16} />
-                          Ouvrir sur YouTube
-                        </a>
-                      )}
-                    </div>
-                  </div>
-
                   <div className="p-6 sm:p-8">
                     {introductionVideoId ? (
                       <div className="relative overflow-hidden rounded-[28px] border border-gray-200 bg-slate-950 shadow-[0_30px_80px_rgba(15,23,42,0.28)]">
@@ -774,13 +747,9 @@ export default function ClientPage() {
             {activeTab === "files" && (
               <div className="bg-white/80 backdrop-blur-2xl rounded-3xl shadow-2xl border border-gray-200/60 overflow-hidden">
                 <div className="p-6 sm:p-10 border-b border-gray-200/60 bg-gradient-to-br from-gray-50/50 to-white/50">
-                  <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2 flex items-center gap-3">
-                    <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                      <ImageIcon className="text-purple-600" size={24} />
-                    </div>
-                    Vos fichiers PNG
-                  </h2>
-                  <p className="text-gray-600 text-base sm:text-lg">Téléchargez les fichiers PNG de votre projet</p>
+                  <p className="text-center text-lg sm:text-xl font-semibold text-gray-700">
+                    Vous pouvez consulter l&apos;avancement de la maquette
+                  </p>
                 </div>
                 <div className="p-6 sm:p-8 space-y-4">
                   {(!client.project.files || client.project.files.length === 0) ? (
@@ -842,21 +811,33 @@ export default function ClientPage() {
             )}
       
             {/* Chat Tab */}
-            {activeTab === "chat" && conversationId && client && clientUniqueId && (
+            {activeTab === "chat" && (
               <div className="bg-white/80 backdrop-blur-2xl rounded-3xl shadow-2xl border border-gray-200/60 overflow-hidden p-6 sm:p-10 flex flex-col h-[500px]">
-                <Chat 
-                  conversationId={conversationId} 
-                  currentUser={{ 
-                    id: clientUniqueId, 
-                    email: client.email, 
-                    name: client.name, 
-                    role: 'user', 
-                    createdAt: new Date(), 
-                    updatedAt: new Date() 
-                  }}
-                  portalToken={portalToken}
-                  onNewMessage={handleNewMessage}
-                />
+                {conversationId && clientUniqueId ? (
+                  <Chat 
+                    conversationId={conversationId} 
+                    currentUser={{ 
+                      id: clientUniqueId, 
+                      email: client.email, 
+                      name: client.name, 
+                      role: 'user', 
+                      createdAt: new Date(), 
+                      updatedAt: new Date() 
+                    }}
+                    portalToken={portalToken}
+                    onNewMessage={handleNewMessage}
+                  />
+                ) : (
+                  <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
+                    <div className="h-12 w-12 rounded-full border-4 border-slate-200 border-t-slate-700 animate-spin" />
+                    <div>
+                      <p className="text-lg font-semibold text-gray-900">Chargement du chat…</p>
+                      <p className="mt-1 text-sm text-gray-600">
+                        La conversation se prépare, elle va s&apos;afficher automatiquement.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </main>
