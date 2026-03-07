@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Send, Bell, BellOff, Trash2 } from "lucide-react";
+import { Send, Trash2 } from "lucide-react";
 import { io, Socket } from "socket.io-client";
 import { getPerfDelay } from "@/lib/utils";
 
@@ -36,19 +36,11 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [partnerTyping, setPartnerTyping] = useState(false);
-  const [hasNotificationPermission, setHasNotificationPermission] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(true);
   const [sendError, setSendError] = useState<string | null>(null);
   const [messageActionError, setMessageActionError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // Refs pour éviter de recréer la connexion socket quand ces valeurs changent
-  const soundRef = useRef<boolean>(soundEnabled);
-  useEffect(() => { soundRef.current = soundEnabled; }, [soundEnabled]);
-  const notifyPermRef = useRef<boolean>(hasNotificationPermission);
-  useEffect(() => { notifyPermRef.current = hasNotificationPermission; }, [hasNotificationPermission]);
   const onNewMessageRef = useRef<(() => void) | undefined>(onNewMessage);
   useEffect(() => { onNewMessageRef.current = onNewMessage; }, [onNewMessage]);
   const typingTimeoutRef = useRef<number | null>(null);
@@ -121,17 +113,6 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
     return `${url}${joiner}portalToken=${encodeURIComponent(portalToken)}`;
   };
 
-  // Request notification permission on mount
-  useEffect(() => {
-    if ("Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission().then(permission => {
-        setHasNotificationPermission(permission === "granted");
-      });
-    } else if ("Notification" in window && Notification.permission === "granted") {
-      setHasNotificationPermission(true);
-    }
-  }, []);
-
   // Load messages on mount
   useEffect(() => {
     if (!conversationId) return;
@@ -202,13 +183,6 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
       if (message.conversationId === conversationId) {
         setMessages(prev => prev.some(m => m.id === message.id) ? prev : [...prev, message]);
 
-        // Lecture son / notification via refs pour éviter les re-creations
-        if (soundRef.current && message.senderId !== currentUser.id) {
-          playNotificationSound();
-        }
-        if (notifyPermRef.current && message.senderId !== currentUser.id) {
-          showBrowserNotification(message);
-        }
         if (onNewMessageRef.current && message.senderId !== currentUser.id) {
           onNewMessageRef.current();
         }
@@ -302,22 +276,6 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
     el.style.height = `${next}px`;
   }, [input]);
 
-  const playNotificationSound = () => {
-    if (audioRef.current) {
-      audioRef.current.play().catch(e => console.log("Erreur lecture son:", e));
-    }
-  };
-
-  const showBrowserNotification = (message: Message) => {
-    if ("Notification" in window && Notification.permission === "granted") {
-      new Notification("Nouveau message", {
-        body: `${message.senderId === currentUser.id ? 'Vous' : 'Admin'}: ${message.content}`,
-        icon: "/favicon.ico",
-        tag: "chat-message"
-      });
-    }
-  };
-
   const emitTypingStart = () => {
     if (!socket || !isConnected || !conversationId) return;
     if (!typingActiveRef.current) {
@@ -398,9 +356,6 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
 
   return (
     <div className="flex flex-col h-full bg-white rounded-2xl shadow-lg overflow-hidden">
-      {/* Audio element for notification sound */}
-      <audio ref={audioRef} src="/notification.mp3" preload="auto" />
-      
       {/* Header */}
       <div className="bg-gradient-to-r from-slate-800 to-gray-900 text-white p-4 flex items-center justify-between border-b border-gray-700">
         <div className="flex items-center gap-3">
@@ -415,19 +370,6 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
             </div>
           </div>
         </div>
-        
-        {/* Sound toggle */}
-        <button
-          onClick={() => setSoundEnabled(!soundEnabled)}
-          className="p-2 rounded-lg hover:bg-white/10 transition-colors"
-          title={soundEnabled ? "Désactiver les sons" : "Activer les sons"}
-        >
-          {soundEnabled ? (
-            <Bell className="w-5 h-5" />
-          ) : (
-            <BellOff className="w-5 h-5" />
-          )}
-        </button>
       </div>
 
       {/* Messages */}

@@ -34,7 +34,6 @@ export default function AdminMessaging() {
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [newMessage, setNewMessage] = useState('');
   const [socket, setSocket] = useState<Socket | null>(null);
-  const [notifications, setNotifications] = useState<Message[]>([]);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
