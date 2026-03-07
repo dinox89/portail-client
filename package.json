@@ -13,7 +13,7 @@
     "db:migrate": "prisma migrate dev",
     "db:reset": "prisma migrate reset",
     "migrate:deploy": "PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK=1 prisma migrate deploy",
-    "build:deploy": "npm run db:generate && npx prisma migrate resolve --applied 000_init && npm run migrate:deploy && npm run build"
+    "build:deploy": "npm run db:generate && npm run migrate:deploy && npm run build"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
