@@ -36,6 +36,7 @@ interface Step {
 interface Project {
   name: string;
   description: string;
+  videoUrl?: string;
   startDate: string;
   endDate: string;
   status: string;
@@ -412,6 +413,7 @@ const App: React.FC = () => {
         project: {
           name: '',
           description: '',
+          videoUrl: '',
           startDate: new Date().toISOString().split('T')[0],
           endDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           status: '',
@@ -1510,6 +1512,19 @@ const App: React.FC = () => {
                       project: { ...editingProject.project, description: e.target.value }
                     })}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 h-24"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Lien vidéo YouTube</label>
+                  <input
+                    type="text"
+                    value={editingProject.project.videoUrl || ''}
+                    onChange={(e) => setEditingProject({ 
+                      ...editingProject, 
+                      project: { ...editingProject.project, videoUrl: e.target.value }
+                    })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="https://www.youtube.com/watch?v=..."
                   />
                 </div>
 

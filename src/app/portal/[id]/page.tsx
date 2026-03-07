@@ -26,6 +26,7 @@ interface ProjectFile {
 interface Project {
   name: string;
   description: string;
+  videoUrl?: string;
   startDate: string;
   endDate: string;
   status: string;
@@ -56,6 +57,21 @@ export default function ClientPage() {
   const [unreadCount, setUnreadCount] = useState(0);
   const defaultTitleRef = useRef<string>('');
   const clientUniqueId = client?.uniqueId || '';
+  const getYoutubeId = (url: string) => {
+    try {
+      const parsed = new URL(url);
+      if (parsed.hostname === "youtu.be") {
+        return parsed.pathname.replace("/", "");
+      }
+      if (parsed.hostname.includes("youtube.com")) {
+        if (parsed.pathname.startsWith("/embed/")) {
+          return parsed.pathname.split("/embed/")[1] || "";
+        }
+        return parsed.searchParams.get("v") || "";
+      }
+    } catch {}
+    return "";
+  };
 
   useEffect(() => {
     const loadClientData = async () => {
@@ -243,7 +259,7 @@ export default function ClientPage() {
           email: updated?.email ?? prev?.email ?? '',
           progression: (updated?.progression ?? prev?.progression ?? 0) as number,
           project: (updated?.project ?? prev?.project ?? {
-            name: '', description: '', startDate: '', endDate: '', status: '', steps: [], files: []
+            name: '', description: '', videoUrl: '', startDate: '', endDate: '', status: '', steps: [], files: []
           }) as Project,
         };
       });
@@ -528,6 +544,38 @@ export default function ClientPage() {
                     </div>
                   </div>
                 </div>
+                {client?.project?.videoUrl && (
+                  <div className="bg-white/80 backdrop-blur-2xl rounded-3xl shadow-2xl border border-gray-200/60 overflow-hidden">
+                    <div className="p-6 sm:p-10 border-b border-gray-200/60 bg-gradient-to-br from-gray-50/50 to-white/50">
+                      <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2 flex items-center gap-3">
+                        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                          <MessageSquare className="text-blue-600" size={24} />
+                        </div>
+                        Introduction
+                      </h2>
+                      <p className="text-gray-600 text-base sm:text-lg">Présentation rapide du projet</p>
+                    </div>
+                    <div className="p-6 sm:p-8">
+                      <div className="relative w-full overflow-hidden rounded-2xl bg-black">
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-blue-300 to-blue-600 animate-pulse"></div>
+                        <div className="pt-[56.25%]"></div>
+                        {getYoutubeId(client.project.videoUrl || "") ? (
+                          <iframe
+                            className="absolute inset-0 h-full w-full"
+                            src={`https://www.youtube-nocookie.com/embed/${getYoutubeId(client.project.videoUrl || "")}?rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&controls=1&fs=1&cc_load_policy=0`}
+                            title="Introduction"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                          />
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center text-white text-sm sm:text-base">
+                            Lien YouTube invalide
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Étapes du projet */}
                 <div className="bg-white/80 backdrop-blur-2xl rounded-3xl shadow-2xl border border-gray-200/60 overflow-hidden">
