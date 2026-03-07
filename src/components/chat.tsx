@@ -396,7 +396,7 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
                     <button
                       type="button"
                       onClick={() => deleteMessage(message.id)}
-                      className="absolute -right-2 -top-2 rounded-full border border-white/20 bg-slate-950/85 p-1.5 text-white opacity-0 shadow-lg transition group-hover:opacity-100 hover:bg-red-600"
+                      className="absolute -right-2 -top-2 rounded-full border border-white/20 bg-slate-950/85 p-1.5 text-white opacity-100 shadow-lg transition hover:bg-red-600 sm:opacity-0 sm:group-hover:opacity-100"
                       title="Supprimer le message"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
