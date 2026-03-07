@@ -195,6 +195,7 @@ export default function ClientPage() {
   const loadConversation = async (userId: string) => {
     setIsConversationLoading(true);
     setConversationError(null);
+    setConversationId(null);
 
     try {
       const res = await fetch(`/api/conversations?portalToken=${encodeURIComponent(portalToken)}`, {
@@ -214,6 +215,7 @@ export default function ClientPage() {
       setConversationError(null);
     } catch (error) {
       console.error('Error fetching conversation:', error);
+      setConversationId(null);
       setConversationError('Impossible de charger le chat');
     } finally {
       setIsConversationLoading(false);
@@ -634,6 +636,8 @@ export default function ClientPage() {
                                 referrerPolicy="strict-origin-when-cross-origin"
                                 onLoad={() => setIsIntroductionReady(true)}
                               />
+                              <div className="pointer-events-none absolute bottom-3 left-3 z-10 h-8 w-28 rounded-full bg-slate-950/70 backdrop-blur-sm" />
+                              <div className="pointer-events-none absolute bottom-3 right-3 z-10 h-8 w-16 rounded-full bg-slate-950/70 backdrop-blur-sm" />
                             </>
                           )}
                         </div>

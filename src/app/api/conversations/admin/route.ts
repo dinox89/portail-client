@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 
 export async function GET(request: Request) {
   try {
+    const adminUserId = process.env.NEXT_PUBLIC_ADMIN_USER_ID || 'admin-user-id';
     // Récupérer toutes les conversations avec leurs messages et utilisateurs
     const conversations = await db.conversation.findMany({
       include: {
@@ -24,7 +25,7 @@ export async function GET(request: Request) {
     // Formater les données pour l'admin
     const formattedConversations = conversations.map(conversation => {
       const lastMessage = conversation.messages[0];
-      const clientUser = conversation.users.find(user => user.id !== 'admin-user-id');
+      const clientUser = conversation.users.find(user => user.id !== adminUserId);
       
       return {
         id: conversation.id,
@@ -45,7 +46,7 @@ export async function GET(request: Request) {
           },
         } : null,
         unreadCount: conversation.messages.filter(msg => 
-          !msg.read && msg.senderId !== 'admin-user-id'
+          !msg.read && msg.senderId !== adminUserId
         ).length,
       };
     });

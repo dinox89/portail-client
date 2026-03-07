@@ -178,6 +178,7 @@ const mergeClients = (primary: Client[], secondary: Client[]) => {
 };
 
 const App: React.FC = () => {
+  const adminUserId = process.env.NEXT_PUBLIC_ADMIN_USER_ID ?? 'admin-user-id';
   const [isAuthenticated, setIsAuthenticated] = useState(true);
   const [password, setPassword] = useState('');
   const [showPasswordError, setShowPasswordError] = useState(false);
@@ -284,7 +285,7 @@ const App: React.FC = () => {
         const map: Record<string, string> = {};
         const unreadMap: Record<string, number> = {};
         data.forEach((conv: any) => {
-          const clientUser = conv.users.find((u: any) => u.id !== 'admin-user-id');
+          const clientUser = conv.users.find((u: any) => u.id !== adminUserId);
           if (clientUser) {
             map[conv.id] = clientUser.id;
             unreadMap[clientUser.id] = conv.unreadCount || 0;
@@ -300,14 +301,14 @@ const App: React.FC = () => {
       }
     };
     loadAdminConversations();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, adminUserId]);
 
   // Initialiser le socket admin et synchroniser les compteurs
   useEffect(() => {
     if (!isAuthenticated) return;
     let cancelled = false;
     const setup = async () => {
-      const adminId = process.env.NEXT_PUBLIC_ADMIN_USER_ID ?? 'admin-user-id';
+      const adminId = adminUserId;
       let token: string | null = null;
       try {
         const res = await fetch(`/api/realtime/token?userId=${encodeURIComponent(adminId)}`);
@@ -367,7 +368,7 @@ const App: React.FC = () => {
       cancelled = true;
       if (socketRef.current) socketRef.current.close();
     };
-  }, [conversationClientMap, isAuthenticated]);
+  }, [conversationClientMap, isAuthenticated, adminUserId]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -379,7 +380,7 @@ const App: React.FC = () => {
         const unreadMap: Record<string, number> = {};
         const map: Record<string, string> = {};
         data.forEach((conv: any) => {
-          const clientUser = conv.users.find((u: any) => u.id !== 'admin-user-id');
+          const clientUser = conv.users.find((u: any) => u.id !== adminUserId);
           if (clientUser) {
             map[conv.id] = clientUser.id;
             unreadMap[clientUser.id] = conv.unreadCount || 0;
@@ -393,7 +394,7 @@ const App: React.FC = () => {
       } catch {}
     }, 10000);
     return () => window.clearInterval(t);
-  }, [isAuthenticated]);
+  }, [isAuthenticated, adminUserId]);
 
   const handleLogin = async () => {
     try {
@@ -546,7 +547,7 @@ const App: React.FC = () => {
       const res = await fetch('/api/conversations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId1: client.uniqueId, userId2: 'admin-user-id' }),
+        body: JSON.stringify({ userId1: client.uniqueId, userId2: adminUserId }),
       });
       
       if (!res.ok) {
@@ -559,13 +560,13 @@ const App: React.FC = () => {
       setConversationId(data.id);
       setConversationClientMap(prev => ({ ...prev, [data.id]: client.uniqueId }));
       socketRef.current?.emit('joinConversation', data.id);
-      socketRef.current?.emit('markAsRead', { conversationId: data.id, userId: 'admin-user-id' });
+      socketRef.current?.emit('markAsRead', { conversationId: data.id, userId: adminUserId });
       setUnreadByClient(prev => ({ ...prev, [client.uniqueId]: 0 }));
       try {
         await fetch(`/api/conversations/${data.id}/mark-read`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: 'admin-user-id' })
+          body: JSON.stringify({ userId: adminUserId })
         });
       } catch {}
     } catch (error) {
@@ -1563,7 +1564,7 @@ const App: React.FC = () => {
                   <Chat 
                     conversationId={conversationId} 
                     currentUser={{
-                      id: 'admin-user-id',
+                      id: adminUserId,
                       email: 'admin@example.com',
                       name: 'Admin',
                       role: 'admin',
