@@ -2,7 +2,7 @@
 
 import { useRef, useState, useEffect } from "react";
 import { useParams } from "next/navigation";
-import { Download, CheckCircle, Clock, AlertCircle, Image as ImageIcon, MessageSquare } from "lucide-react";
+import { Download, CheckCircle, Clock, AlertCircle, Image as ImageIcon, MessageSquare, PlayCircle, ExternalLink } from "lucide-react";
 import Chat from "@/components/chat";
 import { ClientNotification } from "@/components/client-notification";
 
@@ -96,12 +96,15 @@ const normalizeClient = (client: any): Client => ({
 export default function ClientPage() {
   const params = useParams();
   const portalToken = params.id as string;
-  const [activeTab, setActiveTab] = useState("project");
+  const [activeTab, setActiveTab] = useState("introduction");
   const [client, setClient] = useState<Client | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [isIntroductionPlaying, setIsIntroductionPlaying] = useState(false);
+  const [isIntroductionReady, setIsIntroductionReady] = useState(false);
+  const [introductionThumbnailUrl, setIntroductionThumbnailUrl] = useState("");
   const defaultTitleRef = useRef<string>('');
   const clientUniqueId = client?.uniqueId || '';
   const getYoutubeId = (url: string) => {
@@ -260,7 +263,6 @@ export default function ClientPage() {
     }
   }, []);
 
-  const prevUnreadRef = useRef<number>(0);
   useEffect(() => {
     if (typeof document === 'undefined') return;
     const base = defaultTitleRef.current || document.title;
@@ -271,8 +273,25 @@ export default function ClientPage() {
     } else if (!document.hidden) {
       document.title = defaultTitleRef.current || document.title;
     }
-    prevUnreadRef.current = unreadCount;
   }, [unreadCount, activeTab]);
+
+  const introductionVideoUrl = client?.project?.videoUrl || "";
+  const introductionVideoId = getYoutubeId(introductionVideoUrl);
+  const defaultIntroductionThumbnailUrl = introductionVideoId
+    ? `https://i.ytimg.com/vi/${introductionVideoId}/maxresdefault.jpg`
+    : "";
+  const introductionEmbedUrl = introductionVideoId
+    ? `https://www.youtube-nocookie.com/embed/${introductionVideoId}?autoplay=1&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&controls=1&fs=1&cc_load_policy=0`
+    : "";
+
+  useEffect(() => {
+    setIsIntroductionPlaying(false);
+    setIsIntroductionReady(false);
+  }, [introductionVideoUrl]);
+
+  useEffect(() => {
+    setIntroductionThumbnailUrl(defaultIntroductionThumbnailUrl);
+  }, [defaultIntroductionThumbnailUrl]);
 
   useEffect(() => {
     const onVisibility = () => {
@@ -369,6 +388,7 @@ export default function ClientPage() {
   };
 
   const FORM_URL = "https://tally.so/r/wQgVk1";
+  const tabs = ["introduction", "project", "files", "formulaire", "chat"] as const;
 
   if (loading) {
     return (
@@ -488,8 +508,8 @@ export default function ClientPage() {
       
           {/* Navigation */}
           <nav className="max-w-7xl mx-auto px-4 sm:px-8 mt-10 flex justify-center">
-            <div className="bg-white/80 backdrop-blur-2xl rounded-3xl p-2 shadow-2xl border border-gray-200/60 flex gap-2 justify-center w-full max-w-4xl lg:max-w-5xl xl:max-w-6xl">
-              {["project", "files", "formulaire", "chat"].map((tab) => {
+            <div className="bg-white/80 backdrop-blur-2xl rounded-3xl p-2 shadow-2xl border border-gray-200/60 flex gap-2 justify-center w-full max-w-5xl lg:max-w-6xl xl:max-w-7xl">
+              {tabs.map((tab) => {
                 const active = activeTab === tab;
                 const chatUnread = tab === "chat" ? unreadCount : 0;
                 
@@ -503,6 +523,9 @@ export default function ClientPage() {
                     }`}
                   >
                     <span className={`inline-flex ${active ? "text-white" : "text-gray-400"}`}>
+                      {tab === "introduction" && (
+                        <PlayCircle className="w-5 h-5" />
+                      )}
                       {tab === "project" && (
                         <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                           <path d="M12 3l9 8h-3v8h-12v-8h-3l9-8z" />
@@ -530,7 +553,9 @@ export default function ClientPage() {
                     )}
       
                     <span className="hidden sm:inline">
-                      {tab === "project"
+                      {tab === "introduction"
+                        ? "Introduction"
+                        : tab === "project"
                         ? "Mon projet"
                         : tab === "files"
                         ? "Mes fichiers"
@@ -547,6 +572,121 @@ export default function ClientPage() {
           </nav>
       
           <main className="max-w-7xl mx-auto px-4 sm:px-8 py-10 pb-20 space-y-10">
+            {activeTab === "introduction" && (
+              <div className="space-y-8">
+                <div className="bg-white/80 backdrop-blur-2xl rounded-3xl shadow-2xl border border-gray-200/60 overflow-hidden">
+                  <div className="p-6 sm:p-10 border-b border-gray-200/60 bg-gradient-to-br from-red-50/80 via-white to-slate-50/80">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                      <div>
+                        <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2 flex items-center gap-3">
+                          <div className="w-11 h-11 bg-red-100 rounded-2xl flex items-center justify-center shadow-sm">
+                            <PlayCircle className="text-red-600" size={24} />
+                          </div>
+                          Introduction
+                        </h2>
+                        <p className="text-gray-600 text-base sm:text-lg">
+                          Une vidéo d&apos;accueil séparée du reste du projet, chargée uniquement quand vous la lancez.
+                        </p>
+                      </div>
+                      {introductionVideoUrl && (
+                        <a
+                          href={introductionVideoUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-2 self-start rounded-2xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm hover:border-red-200 hover:text-red-600"
+                        >
+                          <ExternalLink size={16} />
+                          Ouvrir sur YouTube
+                        </a>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="p-6 sm:p-8">
+                    {introductionVideoId ? (
+                      <div className="relative overflow-hidden rounded-[28px] border border-gray-200 bg-slate-950 shadow-[0_30px_80px_rgba(15,23,42,0.28)]">
+                        <div className="absolute inset-x-0 top-0 z-20 h-1.5 overflow-hidden bg-white/10">
+                          <div className="h-full w-1/3 rounded-full bg-gradient-to-r from-red-500 via-orange-300 to-red-600 animate-[gradient_2.2s_ease-in-out_infinite]" />
+                        </div>
+                        <div className="relative pt-[56.25%]">
+                          {!isIntroductionPlaying ? (
+                            <button
+                              type="button"
+                              onClick={() => setIsIntroductionPlaying(true)}
+                              className="group absolute inset-0 flex h-full w-full items-center justify-center overflow-hidden"
+                              aria-label="Lire la vidéo d'introduction"
+                            >
+                              <img
+                                src={introductionThumbnailUrl}
+                                alt="Aperçu de la vidéo d'introduction"
+                                className="absolute inset-0 h-full w-full object-cover opacity-80 transition duration-500 group-hover:scale-[1.03] group-hover:opacity-100"
+                                loading="eager"
+                                decoding="async"
+                                referrerPolicy="no-referrer"
+                                onError={() => {
+                                  const fallbackThumbnail = introductionVideoId
+                                    ? `https://i.ytimg.com/vi/${introductionVideoId}/hqdefault.jpg`
+                                    : "";
+                                  if (fallbackThumbnail && introductionThumbnailUrl !== fallbackThumbnail) {
+                                    setIntroductionThumbnailUrl(fallbackThumbnail);
+                                  }
+                                }}
+                              />
+                              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(15,23,42,0.15),rgba(15,23,42,0.88)_72%)]" />
+                              <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-slate-950 via-slate-950/75 to-transparent" />
+                              <div className="relative z-10 flex flex-col items-center gap-4 px-6 text-center text-white">
+                                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-red-600 shadow-[0_18px_40px_rgba(220,38,38,0.45)] transition-transform duration-300 group-hover:scale-105">
+                                  <PlayCircle size={40} fill="currentColor" />
+                                </div>
+                                <div>
+                                  <p className="text-xl font-semibold sm:text-2xl">Lire la vidéo d&apos;introduction</p>
+                                  <p className="mt-2 text-sm text-white/75 sm:text-base">
+                                    Le lecteur YouTube reste masqué tant que vous ne lancez pas la vidéo, pour économiser des données.
+                                  </p>
+                                </div>
+                              </div>
+                            </button>
+                          ) : (
+                            <>
+                              {!isIntroductionReady && (
+                                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-slate-950 text-white">
+                                  <div className="h-12 w-12 rounded-full border-4 border-white/20 border-t-red-500 animate-spin" />
+                                  <div className="w-56 overflow-hidden rounded-full bg-white/10">
+                                    <div className="h-1.5 w-1/2 rounded-full bg-gradient-to-r from-red-500 via-orange-300 to-red-600 animate-[gradient_1.8s_ease-in-out_infinite]" />
+                                  </div>
+                                  <p className="text-sm text-white/75">Préparation de la lecture…</p>
+                                </div>
+                              )}
+                              <iframe
+                                className="absolute inset-0 h-full w-full"
+                                src={introductionEmbedUrl}
+                                title="Vidéo d'introduction"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowFullScreen
+                                loading="lazy"
+                                referrerPolicy="strict-origin-when-cross-origin"
+                                onLoad={() => setIsIntroductionReady(true)}
+                              />
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-[28px] border border-dashed border-gray-300 bg-gradient-to-br from-gray-50 to-white p-10 text-center">
+                        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100 text-gray-400">
+                          <PlayCircle size={30} />
+                        </div>
+                        <h3 className="text-xl font-semibold text-gray-900">Introduction bientôt disponible</h3>
+                        <p className="mt-2 text-sm text-gray-600 sm:text-base">
+                          La vidéo d&apos;introduction n&apos;a pas encore été ajoutée pour ce projet.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Project Tab */}
             {activeTab === "project" && (
               <div className="space-y-8">
@@ -588,38 +728,6 @@ export default function ClientPage() {
                     </div>
                   </div>
                 </div>
-                {client?.project?.videoUrl && (
-                  <div className="bg-white/80 backdrop-blur-2xl rounded-3xl shadow-2xl border border-gray-200/60 overflow-hidden">
-                    <div className="p-6 sm:p-10 border-b border-gray-200/60 bg-gradient-to-br from-gray-50/50 to-white/50">
-                      <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2 flex items-center gap-3">
-                        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                          <MessageSquare className="text-blue-600" size={24} />
-                        </div>
-                        Introduction
-                      </h2>
-                      <p className="text-gray-600 text-base sm:text-lg">Présentation rapide du projet</p>
-                    </div>
-                    <div className="p-6 sm:p-8">
-                      <div className="relative w-full overflow-hidden rounded-2xl bg-black">
-                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-blue-300 to-blue-600 animate-pulse"></div>
-                        <div className="pt-[56.25%]"></div>
-                        {getYoutubeId(client.project.videoUrl || "") ? (
-                          <iframe
-                            className="absolute inset-0 h-full w-full"
-                            src={`https://www.youtube-nocookie.com/embed/${getYoutubeId(client.project.videoUrl || "")}?rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&controls=1&fs=1&cc_load_policy=0`}
-                            title="Introduction"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                            allowFullScreen
-                          />
-                        ) : (
-                          <div className="absolute inset-0 flex items-center justify-center text-white text-sm sm:text-base">
-                            Lien YouTube invalide
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
 
                 {/* Étapes du projet */}
                 <div className="bg-white/80 backdrop-blur-2xl rounded-3xl shadow-2xl border border-gray-200/60 overflow-hidden">
