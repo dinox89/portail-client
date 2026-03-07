@@ -6,7 +6,7 @@ const adminCookieName = 'admin_session';
 export function middleware(request: NextRequest) {
   const { pathname, searchParams } = request.nextUrl;
   if (pathname.startsWith('/portal/')) return NextResponse.next();
-  if (pathname.startsWith('/api/portal/')) return NextResponse.next();
+  if (pathname.startsWith('/api/portal')) return NextResponse.next();
   if (pathname.startsWith('/admin/login')) return NextResponse.next();
   if (pathname.startsWith('/api/admin/login') || pathname.startsWith('/api/admin/logout')) {
     return NextResponse.next();
