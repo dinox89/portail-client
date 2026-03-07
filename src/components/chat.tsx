@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Send, Bell, BellOff } from "lucide-react";
+import { Send, Bell, BellOff, Trash2 } from "lucide-react";
 import { io, Socket } from "socket.io-client";
 import { getPerfDelay } from "@/lib/utils";
 
@@ -39,6 +39,7 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
   const [hasNotificationPermission, setHasNotificationPermission] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [messageActionError, setMessageActionError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -222,6 +223,13 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
       }
     });
 
+    newSocket.on("messageDeleted", (payload: { conversationId: string; messageId: string }) => {
+      if (payload.conversationId === conversationId) {
+        prevIdsRef.current.delete(payload.messageId);
+        setMessages((prev) => prev.filter((message) => message.id !== payload.messageId));
+      }
+    });
+
     setSocket(newSocket);
 
     return () => {
@@ -343,6 +351,7 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
         setInput("");
         emitTypingStopImmediate();
         setSendError(null);
+        setMessageActionError(null);
       } else {
         try {
           const err = await res.json();
@@ -354,6 +363,29 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
     } catch (error) {
       console.error("Erreur lors de l'envoi du message:", error);
       setSendError("Erreur réseau lors de l'envoi du message");
+    }
+  };
+
+  const deleteMessage = async (messageId: string) => {
+    try {
+      const res = await fetch(withPortalToken(`/api/conversations/${conversationId}/messages`), {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messageId, userId: currentUser.id }),
+      });
+
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        setMessageActionError(typeof payload?.error === "string" ? payload.error : "Échec de la suppression du message");
+        return;
+      }
+
+      prevIdsRef.current.delete(messageId);
+      setMessages((prev) => prev.filter((message) => message.id !== messageId));
+      setMessageActionError(null);
+    } catch (error) {
+      console.error("Erreur lors de la suppression du message:", error);
+      setMessageActionError("Erreur réseau lors de la suppression du message");
     }
   };
 
@@ -413,11 +445,21 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
             const isOwn = message.senderId === currentUser.id;
             return (
               <div key={message.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
+                <div className={`group relative max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
                   isOwn 
                     ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white' 
                     : 'bg-gray-100 text-gray-900'
                 }`}>
+                  {isOwn && (
+                    <button
+                      type="button"
+                      onClick={() => deleteMessage(message.id)}
+                      className="absolute -right-2 -top-2 rounded-full border border-white/20 bg-slate-950/85 p-1.5 text-white opacity-0 shadow-lg transition group-hover:opacity-100 hover:bg-red-600"
+                      title="Supprimer le message"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                   <p className="text-sm whitespace-pre-wrap break-words">
                     {renderMessageContent(message.content)}
                   </p>
@@ -468,6 +510,9 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
         </div>
         {sendError && (
           <p className="mt-2 text-sm text-red-600">{sendError}</p>
+        )}
+        {messageActionError && (
+          <p className="mt-2 text-sm text-red-600">{messageActionError}</p>
         )}
       </div>
     </div>

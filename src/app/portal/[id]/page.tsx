@@ -294,7 +294,7 @@ export default function ClientPage() {
     ? `https://i.ytimg.com/vi/${introductionVideoId}/maxresdefault.jpg`
     : "";
   const introductionEmbedUrl = introductionVideoId
-    ? `https://www.youtube-nocookie.com/embed/${introductionVideoId}?autoplay=1&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&controls=0&fs=0&disablekb=1&cc_load_policy=0`
+    ? `https://www.youtube-nocookie.com/embed/${introductionVideoId}?autoplay=1&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&controls=1&fs=1&cc_load_policy=0`
     : "";
 
   useEffect(() => {
@@ -620,7 +620,7 @@ export default function ClientPage() {
                           ) : (
                             <>
                               {!isIntroductionReady && (
-                                <div className="absolute inset-0 z-10 flex items-end bg-[linear-gradient(180deg,rgba(15,23,42,0.08),rgba(15,23,42,0.62))] px-6 pb-6">
+                                <div className="pointer-events-none absolute inset-x-0 bottom-6 z-10 px-6">
                                   <div className="w-full overflow-hidden rounded-full bg-white/15">
                                     <div className="h-1.5 w-1/3 rounded-full bg-gradient-to-r from-white via-slate-200 to-white animate-[gradient_1.8s_ease-in-out_infinite]" />
                                   </div>
@@ -636,8 +636,6 @@ export default function ClientPage() {
                                 referrerPolicy="strict-origin-when-cross-origin"
                                 onLoad={() => setIsIntroductionReady(true)}
                               />
-                              <div className="pointer-events-none absolute bottom-3 left-3 z-10 h-8 w-28 rounded-full bg-slate-950/70 backdrop-blur-sm" />
-                              <div className="pointer-events-none absolute bottom-3 right-3 z-10 h-8 w-16 rounded-full bg-slate-950/70 backdrop-blur-sm" />
                             </>
                           )}
                         </div>

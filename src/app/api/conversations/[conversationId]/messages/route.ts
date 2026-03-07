@@ -156,3 +156,77 @@ export async function POST(
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
   }
 }
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ conversationId: string }> }
+) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const portalToken = searchParams.get('portalToken');
+    const { conversationId } = await params;
+    const body = await request.json().catch(() => null);
+    const messageId = body?.messageId as string | undefined;
+    const userId = body?.userId as string | undefined;
+
+    if (!messageId || !userId) {
+      return NextResponse.json({ error: 'messageId et userId requis' }, { status: 400 });
+    }
+
+    if (portalToken) {
+      const clientPortal = await prisma.clientPortal.findUnique({
+        where: { accessToken: portalToken },
+        select: { id: true },
+      });
+      if (!clientPortal?.id || clientPortal.id !== userId) {
+        return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
+      }
+    }
+
+    const hasAccess = await prisma.conversation.findFirst({
+      where: { id: conversationId, users: { some: { id: userId } } },
+      select: { id: true },
+    });
+
+    if (!hasAccess) {
+      return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
+    }
+
+    const message = await prisma.message.findUnique({
+      where: { id: messageId },
+      include: { sender: true },
+    });
+
+    if (!message || message.conversationId !== conversationId) {
+      return NextResponse.json({ error: 'Message introuvable' }, { status: 404 });
+    }
+
+    if (message.senderId !== userId) {
+      return NextResponse.json({ error: 'Vous pouvez supprimer uniquement vos propres messages' }, { status: 403 });
+    }
+
+    await prisma.message.delete({
+      where: { id: messageId },
+    });
+
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: { updatedAt: new Date() },
+    });
+
+    const { getIO } = await import('@/lib/socket');
+    const io = getIO();
+
+    if (io) {
+      io.to(conversationId).emit('messageDeleted', {
+        conversationId,
+        messageId,
+      });
+    }
+
+    return NextResponse.json({ success: true, messageId });
+  } catch (error) {
+    console.error('Erreur lors de la suppression du message:', error);
+    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+  }
+}

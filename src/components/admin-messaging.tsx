@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { MessageCircle, Send, User, Clock, CheckCircle } from 'lucide-react';
+import { MessageCircle, Send, User, Clock, CheckCircle, Trash2 } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 
 interface Message {
@@ -174,6 +174,17 @@ export default function AdminMessaging() {
       }
     });
 
+    newSocket.on('messageDeleted', (payload: { conversationId: string; messageId: string }) => {
+      setSelectedConversation(prev => {
+        if (!prev || prev.id !== payload.conversationId) return prev;
+        return {
+          ...prev,
+          messages: (prev.messages || []).filter(message => message.id !== payload.messageId),
+        };
+      });
+      void fetchConversations();
+    });
+
     // Charger les conversations initiales
     fetchConversations();
 
@@ -326,6 +337,40 @@ export default function AdminMessaging() {
     }
   };
 
+  const deleteMessage = async (messageId: string) => {
+    if (!selectedConversation) return;
+
+    try {
+      const res = await fetch(`/api/conversations/${selectedConversation.id}/messages`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messageId,
+          userId: ADMIN_USER_ID,
+        })
+      });
+
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        setSendError(typeof payload?.error === 'string' ? payload.error : 'Échec de la suppression du message');
+        return;
+      }
+
+      setSelectedConversation(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          messages: (prev.messages || []).filter(message => message.id !== messageId),
+        };
+      });
+      setSendError(null);
+      await fetchConversations();
+    } catch (error) {
+      setSendError('Erreur réseau lors de la suppression du message');
+      console.error('Erreur lors de la suppression du message:', error);
+    }
+  };
+
   const emitTypingStart = () => {
     if (!socket || !selectedConversation?.id) return;
     if (!typingActiveRef.current) {
@@ -412,12 +457,22 @@ export default function AdminMessaging() {
                   }`}
                 >
                   <div
-                    className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                    className={`group relative max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
                       message.senderId === ADMIN_USER_ID
                         ? 'bg-blue-500 text-white'
                         : 'bg-gray-200 text-gray-800'
                     }`}
                   >
+                    {message.senderId === ADMIN_USER_ID && (
+                      <button
+                        type="button"
+                        onClick={() => deleteMessage(message.id)}
+                        className="absolute -right-2 -top-2 rounded-full border border-white/20 bg-slate-950/85 p-1.5 text-white opacity-0 shadow-lg transition group-hover:opacity-100 hover:bg-red-600"
+                        title="Supprimer le message"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                     <p className="text-sm whitespace-pre-wrap break-words">
                       {renderMessageContent(message.content)}
                     </p>
