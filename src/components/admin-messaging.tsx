@@ -167,9 +167,18 @@ export default function AdminMessaging() {
     });
 
     // Écouter les notifications globales admin
-    newSocket.on('adminNewMessage', () => {
+    newSocket.on('adminNewMessage', async (payload?: { conversationId?: string }) => {
       // Rafraîchir la liste des conversations pour mettre à jour lastMessage/unreadCount
-      fetchConversations();
+      await fetchConversations();
+      const activeConversationId = selectedConvIdRef.current;
+      if (payload?.conversationId && activeConversationId === payload.conversationId) {
+        const messages = await loadConversationMessages(payload.conversationId);
+        setSelectedConversation(prev =>
+          prev && prev.id === payload.conversationId
+            ? { ...prev, messages }
+            : prev
+        );
+      }
     });
 
     newSocket.on('messageDeleted', (payload: { conversationId: string; messageId: string }) => {
@@ -260,6 +269,19 @@ export default function AdminMessaging() {
       pollRef.current = null;
     };
   }, [selectedConversation?.id]);
+
+  useEffect(() => {
+    if (!selectedConversation?.id) {
+      selectedConvIdRef.current = null;
+      return;
+    }
+
+    selectedConvIdRef.current = selectedConversation.id;
+
+    if (socket?.connected) {
+      socket.emit('joinConversation', selectedConversation.id);
+    }
+  }, [socket, selectedConversation?.id]);
 
   const selectConversation = async (conversation: Conversation) => {
     // Quitter l'ancienne room si nécessaire

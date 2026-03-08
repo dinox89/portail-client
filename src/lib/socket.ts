@@ -170,7 +170,7 @@ export class SocketManager {
             clientTempId,
           };
 
-          this.io.to(conversationId).emit("newMessage", payload);
+          await this.emitToConversationParticipants(conversationId, "newMessage", payload);
 
           // Notifier les administrateurs des nouveaux messages
           if (user.role !== "admin") {
@@ -271,6 +271,29 @@ export class SocketManager {
       });
     } catch (error) {
       console.warn(`Impossible de mettre à jour lastSeenAt pour ${userId}:`, error);
+    }
+  }
+
+  private async emitToConversationParticipants(conversationId: string, event: string, payload: any) {
+    this.io.to(conversationId).emit(event, payload);
+
+    try {
+      const conversation = await db.conversation.findUnique({
+        where: { id: conversationId },
+        select: {
+          users: {
+            select: { id: true },
+          },
+        },
+      });
+
+      if (!conversation) return;
+
+      for (const user of conversation.users) {
+        this.notifyUser(user.id, event, payload);
+      }
+    } catch (error) {
+      console.error(`Erreur lors de la diffusion ${event} pour la conversation ${conversationId}:`, error);
     }
   }
 

@@ -44,6 +44,9 @@ export function ClientNotification({ clientId, conversationId, onNewMessage, onP
       return null;
     };
 
+    let active = true;
+    let cleanup = () => {};
+
     const setup = async () => {
       const token = await fetchToken();
       const newSocket = io({
@@ -58,7 +61,9 @@ export function ClientNotification({ clientId, conversationId, onNewMessage, onP
         timeout,
       });
 
-    setSocket(newSocket);
+    if (active) {
+      setSocket(newSocket);
+    }
 
     newSocket.on("connect", async () => {
       if (conversationId) {
@@ -107,11 +112,16 @@ export function ClientNotification({ clientId, conversationId, onNewMessage, onP
       console.warn("ClientNotification: erreur de connexion socket", err);
     });
 
-    return () => {
+    cleanup = () => {
       newSocket.disconnect();
     };
     };
     setup();
+    return () => {
+      active = false;
+      setSocket(null);
+      cleanup();
+    };
   }, [clientId, conversationId, portalToken]);
 
   // Si l'ID de conversation arrive après coup, rejoindre la room
