@@ -11,6 +11,7 @@ interface Message {
   conversationId: string;
   createdAt: string;
   read: boolean;
+  clientTempId?: string;
   sender?: {
     id: string;
     name: string;
@@ -116,6 +117,9 @@ export default function AdminMessaging() {
       return null;
     };
 
+    let active = true;
+    let cleanup = () => {};
+
     const setup = async () => {
       const token = await fetchToken();
       const newSocket = io({
@@ -129,7 +133,9 @@ export default function AdminMessaging() {
         timeout,
         transports: ['websocket', 'polling'],
       });
-    setSocket(newSocket);
+    if (active) {
+      setSocket(newSocket);
+    }
 
     const hb = window.setInterval(() => {
       try {
@@ -138,6 +144,7 @@ export default function AdminMessaging() {
     }, 15000);
 
     newSocket.on('connect', () => {
+      if (!active) return;
       if (selectedConvIdRef.current) {
         newSocket.emit('joinConversation', selectedConvIdRef.current);
       }
@@ -145,13 +152,15 @@ export default function AdminMessaging() {
 
     // Écouter les nouveaux messages dans la conversation rejointe
     newSocket.on('newMessage', (message: Message) => {
+      if (!active) return;
       // Append au chat ouvert si la conversation correspond, en évitant les doublons
       setSelectedConversation(prev => {
         if (prev && prev.id === message.conversationId) {
           const msgs = prev.messages || [];
-          const exists = msgs.some(m => m.id === message.id);
-          if (exists) return prev;
-          return { ...prev, messages: [...msgs, message] };
+          const withoutTemp = message.clientTempId ? msgs.filter((m) => m.id !== message.clientTempId) : msgs;
+          const exists = withoutTemp.some(m => m.id === message.id);
+          if (exists) return { ...prev, messages: withoutTemp };
+          return { ...prev, messages: [...withoutTemp, message] };
         }
         return prev;
       });
@@ -177,12 +186,17 @@ export default function AdminMessaging() {
     // Charger les conversations initiales
     fetchConversations();
 
-    return () => {
+    cleanup = () => {
       newSocket.close();
       window.clearInterval(hb);
     };
     };
     setup();
+    return () => {
+      active = false;
+      setSocket(null);
+      cleanup();
+    };
   }, []);
 
   const fetchConversations = async () => {
@@ -286,13 +300,64 @@ export default function AdminMessaging() {
 
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedConversation) return;
+    const content = newMessage.trim();
+
+    if (socket?.connected) {
+      const clientTempId = `temp-${Date.now()}`;
+      const optimisticMessage: Message = {
+        id: clientTempId,
+        clientTempId,
+        content,
+        senderId: ADMIN_USER_ID,
+        conversationId: selectedConversation.id,
+        createdAt: new Date().toISOString(),
+        read: false,
+      };
+
+      setSelectedConversation(prev => {
+        if (!prev) return prev;
+        return { ...prev, messages: [...(prev.messages || []), optimisticMessage] };
+      });
+      setNewMessage('');
+      setSendError(null);
+
+      const result = await new Promise<{ ok: boolean; message?: Message; error?: string }>((resolve) => {
+        socket.emit('sendMessage', { conversationId: selectedConversation.id, content, clientTempId }, resolve);
+      });
+
+      if (result.ok && result.message) {
+        setSelectedConversation(prev => {
+          if (!prev) return prev;
+          const withoutTemp = (prev.messages || []).filter((message) => message.id !== clientTempId);
+          return {
+            ...prev,
+            messages: withoutTemp.some((message) => message.id === result.message!.id)
+              ? withoutTemp
+              : [...withoutTemp, result.message!],
+          };
+        });
+        await fetchConversations();
+        return;
+      }
+
+      setSelectedConversation(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          messages: (prev.messages || []).filter((message) => message.id !== clientTempId),
+        };
+      });
+      setNewMessage(content);
+      setSendError(result.error || 'Échec de l’envoi du message');
+      return;
+    }
 
     try {
       const res = await fetch(`/api/conversations/${selectedConversation.id}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          content: newMessage,
+          content,
           senderId: ADMIN_USER_ID,
           conversationId: selectedConversation.id
         })

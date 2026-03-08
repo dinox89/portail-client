@@ -12,6 +12,7 @@ interface Message {
   conversationId: string;
   createdAt: string;
   read: boolean;
+  clientTempId?: string;
 }
 
 interface User {
@@ -152,6 +153,9 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
       return null;
     };
 
+    let active = true;
+    let cleanup = () => {};
+
     const setup = async () => {
       const token = await fetchToken();
       const newSocket = io({
@@ -166,6 +170,7 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
       });
 
     newSocket.on("connect", () => {
+      if (!active) return;
       setIsConnected(true);
       newSocket.emit("joinConversation", conversationId);
       // Marquer comme lu immédiatement à l'ouverture du chat
@@ -173,12 +178,18 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
     });
 
     newSocket.on("disconnect", () => {
+      if (!active) return;
       setIsConnected(false);
     });
 
     newSocket.on("newMessage", (message: Message) => {
+      if (!active || message.conversationId !== conversationId) return;
       if (message.conversationId === conversationId) {
-        setMessages(prev => prev.some(m => m.id === message.id) ? prev : [...prev, message]);
+        prevIdsRef.current.add(message.id);
+        setMessages(prev => {
+          const withoutTemp = message.clientTempId ? prev.filter((m) => m.id !== message.clientTempId) : prev;
+          return withoutTemp.some((m) => m.id === message.id) ? withoutTemp : [...withoutTemp, message];
+        });
 
         if (onNewMessageRef.current && message.senderId !== currentUser.id) {
           onNewMessageRef.current();
@@ -193,17 +204,24 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
       }
     });
 
-    setSocket(newSocket);
-
-    return () => {
+    if (active) {
+      setSocket(newSocket);
+    }
+    cleanup = () => {
       newSocket.close();
     };
     };
     setup();
+    return () => {
+      active = false;
+      setSocket(null);
+      cleanup();
+    };
   }, [conversationId, currentUser?.id, portalToken]);
 
   useEffect(() => {
     if (!conversationId || !currentUser?.id) return;
+    const intervalMs = isConnected ? 15000 : 3000;
     const t = window.setInterval(async () => {
       try {
         const res = await fetch(withPortalToken(`/api/conversations/${conversationId}/messages`));
@@ -231,9 +249,9 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
           } catch {}
         }
       } catch {}
-    }, 10000);
+    }, intervalMs);
     return () => window.clearInterval(t);
-  }, [conversationId, currentUser?.id]);
+  }, [conversationId, currentUser?.id, isConnected, portalToken]);
 
   useEffect(() => {
     const delay = getPerfDelay();
@@ -268,12 +286,51 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
   const sendMessage = async () => {
     // Autoriser l'envoi même sans connexion socket (fallback HTTP)
     if (!input.trim()) return;
+    const content = input.trim();
+
+    if (socket?.connected) {
+      const clientTempId = `temp-${Date.now()}`;
+      const optimisticMessage: Message = {
+        id: clientTempId,
+        clientTempId,
+        content,
+        senderId: currentUser.id,
+        conversationId,
+        createdAt: new Date().toISOString(),
+        read: false,
+      };
+
+      setMessages((prev) => [...prev, optimisticMessage]);
+      setInput("");
+      setSendError(null);
+      setMessageActionError(null);
+
+      const result = await new Promise<{ ok: boolean; message?: Message; error?: string }>((resolve) => {
+        socket.emit("sendMessage", { conversationId, content, clientTempId }, resolve);
+      });
+
+      if (result.ok && result.message) {
+        prevIdsRef.current.add(result.message.id);
+        setMessages((prev) => {
+          const withoutTemp = prev.filter((message) => message.id !== clientTempId);
+          return withoutTemp.some((message) => message.id === result.message!.id)
+            ? withoutTemp
+            : [...withoutTemp, result.message!];
+        });
+        return;
+      }
+
+      setMessages((prev) => prev.filter((message) => message.id !== clientTempId));
+      setInput(content);
+      setSendError(result.error || "Échec de l'envoi du message");
+      return;
+    }
 
     try {
       const res = await fetch(withPortalToken(`/api/conversations/${conversationId}/messages`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: input.trim(), senderId: currentUser.id }),
+        body: JSON.stringify({ content, senderId: currentUser.id }),
       });
 
       if (res.ok) {

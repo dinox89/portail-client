@@ -129,9 +129,12 @@ export class SocketManager {
       });
 
       // Envoi de message
-      socket.on("sendMessage", async (data: { conversationId: string; content: string }) => {
+      socket.on("sendMessage", async (
+        data: { conversationId: string; content: string; clientTempId?: string },
+        ack?: (payload: { ok: boolean; message?: any; error?: string }) => void
+      ) => {
         try {
-          const { conversationId, content } = data;
+          const { conversationId, content, clientTempId } = data;
 
           await this.touchLastSeen(userId, true);
 
@@ -162,16 +165,24 @@ export class SocketManager {
           });
 
           // Émettre le message aux participants de la conversation
-          this.io.to(conversationId).emit("newMessage", message);
+          const payload = {
+            ...message,
+            clientTempId,
+          };
+
+          this.io.to(conversationId).emit("newMessage", payload);
 
           // Notifier les administrateurs des nouveaux messages
           if (user.role !== "admin") {
             await this.notifyAdminsOfNewMessage(conversationId, message);
           }
 
+          ack?.({ ok: true, message: payload });
+
         } catch (error) {
           console.error("Erreur lors de l'envoi du message:", error);
           socket.emit("error", { message: "Erreur lors de l'envoi du message" });
+          ack?.({ ok: false, error: "Erreur lors de l'envoi du message" });
         }
       });
 
