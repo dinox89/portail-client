@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, Plus, Search, Edit2, Trash2, X, Save, Building2, ExternalLink, Copy, Check, Lock, LogOut, Image as ImageIcon, MessageSquare, RefreshCcw } from "lucide-react";
+import { Users, Plus, Search, Edit2, Trash2, X, Save, Building2, ExternalLink, Copy, Check, Lock, LogOut, MessageSquare, RefreshCcw } from "lucide-react";
 import Chat from "@/components/chat";
 import AdminMessaging from '@/components/admin-messaging';
 import { io } from 'socket.io-client';
@@ -40,6 +40,11 @@ interface Project {
   description: string;
   videoUrl?: string;
   reportVideoUrl?: string;
+  reportVideos?: Array<{
+    id: number;
+    name: string;
+    url: string;
+  }>;
   startDate: string;
   endDate: string;
   status: string;
@@ -73,6 +78,7 @@ const createEmptyProject = (): Project => {
     description: '',
     videoUrl: '',
     reportVideoUrl: '',
+    reportVideos: [],
     startDate,
     endDate,
     status: '',
@@ -136,6 +142,19 @@ const normalizeProject = (project: Partial<Project> | null | undefined): Project
     ...project,
     videoUrl: typeof project?.videoUrl === 'string' ? project.videoUrl.trim() : '',
     reportVideoUrl: typeof project?.reportVideoUrl === 'string' ? project.reportVideoUrl.trim() : '',
+    reportVideos: Array.isArray((project as any)?.reportVideos)
+      ? (project as any).reportVideos.map((item: any, index: number) => ({
+          id: typeof item?.id === 'number' ? item.id : Date.now() + index,
+          name: typeof item?.name === 'string' ? item.name : `Rapport ${index + 1}`,
+          url: typeof item?.url === 'string' ? item.url.trim() : '',
+        }))
+      : (typeof project?.reportVideoUrl === 'string' && project.reportVideoUrl.trim()
+          ? [{
+              id: Date.now(),
+              name: 'Rapport vidéo',
+              url: project.reportVideoUrl.trim(),
+            }]
+          : []),
     steps: rawSteps.map((step, index) => ({
       id: typeof step?.id === 'number' ? step.id : Date.now() + index,
       name: typeof step?.name === 'string' ? step.name : '',
@@ -940,20 +959,6 @@ const App: React.FC = () => {
                   />
                 </div>
 
-                <div className="mb-6">
-                  <label className="block text-sm font-medium mb-2">Vidéo rapport du site</label>
-                  <input
-                    type="url"
-                    value={editingProject.project.reportVideoUrl || ''}
-                    onChange={(e) => updateEditingProject((current) => ({
-                      ...current,
-                      project: { ...current.project, reportVideoUrl: e.target.value }
-                    }))}
-                    placeholder="https://www.youtube.com/watch?v=..."
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-                  />
-                </div>
-
             <div className="grid grid-cols-2 gap-4 mb-6">
               <div>
                 <label className="block text-sm font-medium mb-2">Date de début</label>
@@ -1083,11 +1088,8 @@ const App: React.FC = () => {
             ) : (
               <div className="space-y-4">
                 {editingProject.project.files.map(file => (
-                  <div key={file.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg bg-gray-50">
-                    <div className="flex items-center gap-4 flex-1">
-                      <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                        <ImageIcon className="text-purple-600" size={24} />
-                      </div>
+                  <div key={file.id} className="flex items-center justify-between gap-4 p-4 border border-gray-200 rounded-lg bg-gray-50">
+                    <div className="flex-1">
                       <div className="flex-1">
                         <input
                           type="text"
@@ -1136,6 +1138,98 @@ const App: React.FC = () => {
                       )}
                       <button
                         onClick={() => handleDeleteFile(file.id)}
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        <Trash2 size={20} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white rounded-lg shadow-sm p-8 mt-6">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold">Rapports du site</h2>
+              <button
+                onClick={() => updateEditingProject((current) => ({
+                  ...current,
+                  project: {
+                    ...current.project,
+                    reportVideos: [
+                      ...(current.project.reportVideos || []),
+                      { id: Date.now(), name: '', url: '' },
+                    ],
+                  },
+                }))}
+                className="px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-700 flex items-center gap-2"
+              >
+                <ExternalLink size={20} />
+                Ajouter une video
+              </button>
+            </div>
+
+            {(!editingProject.project.reportVideos || editingProject.project.reportVideos.length === 0) ? (
+              <p className="text-gray-500 text-center py-8">Aucune video de rapport ajoutée</p>
+            ) : (
+              <div className="space-y-4">
+                {editingProject.project.reportVideos.map((video) => (
+                  <div key={video.id} className="flex items-center justify-between gap-4 p-4 border border-gray-200 rounded-lg bg-gray-50">
+                    <div className="flex-1">
+                      <input
+                        type="text"
+                        value={video.name}
+                        onChange={(e) => updateEditingProject((current) => ({
+                          ...current,
+                          project: {
+                            ...current.project,
+                            reportVideos: (current.project.reportVideos || []).map((item) =>
+                              item.id === video.id ? { ...item, name: e.target.value } : item
+                            ),
+                          },
+                        }))}
+                        className="font-medium w-full px-2 py-1 border border-transparent hover:border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                        placeholder="Nom du rapport"
+                      />
+                      <div className="mt-2">
+                        <input
+                          type="url"
+                          value={video.url}
+                          onChange={(e) => updateEditingProject((current) => ({
+                            ...current,
+                            project: {
+                              ...current.project,
+                              reportVideos: (current.project.reportVideos || []).map((item) =>
+                                item.id === video.id ? { ...item, url: e.target.value } : item
+                              ),
+                            },
+                          }))}
+                          placeholder="https://www.youtube.com/watch?v=..."
+                          className="w-full text-sm px-2 py-1 border border-transparent hover:border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {toSafeExternalUrl(video.url) && (
+                        <a
+                          href={toSafeExternalUrl(video.url) || '#'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2 text-slate-700 hover:bg-slate-200 rounded-lg transition-colors"
+                          title="Ouvrir la video"
+                        >
+                          <ExternalLink size={18} />
+                        </a>
+                      )}
+                      <button
+                        onClick={() => updateEditingProject((current) => ({
+                          ...current,
+                          project: {
+                            ...current.project,
+                            reportVideos: (current.project.reportVideos || []).filter((item) => item.id !== video.id),
+                          },
+                        }))}
                         className="text-red-500 hover:text-red-700"
                       >
                         <Trash2 size={20} />
@@ -1687,20 +1781,6 @@ const App: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-2">Vidéo rapport du site</label>
-                  <input
-                    type="text"
-                    value={editingProject.project.reportVideoUrl || ''}
-                    onChange={(e) => setEditingProject({
-                      ...editingProject,
-                      project: { ...editingProject.project, reportVideoUrl: e.target.value }
-                    })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="https://www.youtube.com/watch?v=..."
-                  />
-                </div>
-
-                <div>
                   <label className="block text-sm font-medium mb-2">Étapes du projet</label>
                   <div className="space-y-2">
                     {editingProject.project.steps?.map((step, index) => (
@@ -1813,6 +1893,73 @@ const App: React.FC = () => {
                       className="text-blue-600 hover:text-blue-700 text-sm font-medium"
                     >
                       + Ajouter un lien
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Rapports du site</label>
+                  <div className="space-y-2">
+                    {editingProject.project.reportVideos?.map((video, index) => (
+                      <div key={video.id ?? index} className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={video.name}
+                          onChange={(e) => {
+                            const nextVideos = (editingProject.project.reportVideos || []).map((item, i) =>
+                              i === index ? { ...item, name: e.target.value } : item
+                            );
+                            setEditingProject({
+                              ...editingProject,
+                              project: { ...editingProject.project, reportVideos: nextVideos }
+                            });
+                          }}
+                          placeholder="Nom du rapport"
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <input
+                          type="url"
+                          value={video.url}
+                          onChange={(e) => {
+                            const nextVideos = (editingProject.project.reportVideos || []).map((item, i) =>
+                              i === index ? { ...item, url: e.target.value } : item
+                            );
+                            setEditingProject({
+                              ...editingProject,
+                              project: { ...editingProject.project, reportVideos: nextVideos }
+                            });
+                          }}
+                          placeholder="https://www.youtube.com/watch?v=..."
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <button
+                          onClick={() => {
+                            const nextVideos = (editingProject.project.reportVideos || []).filter((_, i) => i !== index);
+                            setEditingProject({
+                              ...editingProject,
+                              project: { ...editingProject.project, reportVideos: nextVideos }
+                            });
+                          }}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => {
+                        const nextVideos = [
+                          ...(editingProject.project.reportVideos || []),
+                          { id: Date.now(), name: '', url: '' }
+                        ];
+                        setEditingProject({
+                          ...editingProject,
+                          project: { ...editingProject.project, reportVideos: nextVideos }
+                        });
+                      }}
+                      className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                    >
+                      + Ajouter une video
                     </button>
                   </div>
                 </div>
