@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Send, Trash2 } from "lucide-react";
 import { io, Socket } from "socket.io-client";
 import { getPerfDelay } from "@/lib/utils";
+import { TypingIndicator } from "@/components/typing-indicator";
 
 interface Message {
   id: string;
@@ -268,6 +269,15 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
   }, [conversationId, isConnected]);
 
   useEffect(() => {
+    if (!partnerTyping) return;
+    const delay = getPerfDelay();
+    const t = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }, delay);
+    return () => clearTimeout(t);
+  }, [partnerTyping]);
+
+  useEffect(() => {
     if (!inputRef.current) return;
     const el = inputRef.current;
     el.style.height = "auto";
@@ -413,16 +423,16 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
             );
           })
         )}
+        {partnerTyping && (
+          <TypingIndicator
+            label={currentUser.role === "user" ? "Le prestataire est en train d'écrire..." : "Le client est en train d'écrire..."}
+          />
+        )}
         <div ref={messagesEndRef} />
       </div>
 
       {/* Input */}
       <div className="border-t border-gray-200 p-4 bg-gray-50">
-        {partnerTyping && (
-          <div className="text-xs text-gray-500 mb-1">
-            {currentUser.role === 'user' ? 'Le prestataire est en train d’écrire...' : 'Le client est en train d’écrire...'}
-          </div>
-        )}
         <div className="flex gap-2">
           <textarea
             ref={inputRef}

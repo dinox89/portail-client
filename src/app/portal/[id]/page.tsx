@@ -2,7 +2,7 @@
 
 import { useRef, useState, useEffect } from "react";
 import { useParams } from "next/navigation";
-import { Download, CheckCircle, Clock, AlertCircle, Image as ImageIcon, MessageSquare, PlayCircle } from "lucide-react";
+import { Download, CheckCircle, Clock, AlertCircle, Image as ImageIcon, MessageSquare, PlayCircle, ExternalLink } from "lucide-react";
 import Chat from "@/components/chat";
 import { ClientNotification } from "@/components/client-notification";
 
@@ -19,6 +19,7 @@ interface ProjectFile {
   date: string;
   size: string;
   status: 'completed' | 'in-progress' | 'pending';
+  url?: string;
   fileData?: string;
   fileType?: string;
 }
@@ -76,10 +77,26 @@ const normalizeProject = (project: Partial<Project> | null | undefined): Project
       date: typeof file?.date === 'string' ? file.date : startDate,
       size: typeof file?.size === 'string' ? file.size : '-',
       status: file?.status === 'completed' || file?.status === 'in-progress' ? file.status : 'pending',
+      url: typeof file?.url === 'string' ? file.url.trim() : undefined,
       fileData: typeof file?.fileData === 'string' ? file.fileData : undefined,
       fileType: typeof file?.fileType === 'string' ? file.fileType : undefined,
     })),
   };
+};
+
+const toSafeExternalUrl = (value: string) => {
+  const candidate = value.trim();
+  if (!candidate) return null;
+
+  try {
+    const parsed = new URL(candidate.startsWith('http') ? candidate : `https://${candidate}`);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
 };
 
 const normalizeClient = (client: any): Client => ({
@@ -751,7 +768,7 @@ export default function ClientPage() {
                   {(!client.project.files || client.project.files.length === 0) ? (
                     <div className="text-center py-12 bg-gray-50 rounded-xl">
                       <ImageIcon className="mx-auto mb-3 text-gray-400" size={48} />
-                      <p className="text-gray-600">Aucun fichier PNG disponible pour le moment</p>
+                      <p className="text-gray-600">Aucun lien de fichier disponible pour le moment</p>
                     </div>
                   ) : (
                     client.project.files.map(file => (
@@ -764,21 +781,33 @@ export default function ClientPage() {
                           <div className="flex items-center gap-3 text-sm text-gray-600">
                             <span>{formatDate(file.date)}</span>
                             <span>•</span>
-                            <span>{file.size}</span>
+                            <span>{file.url ? 'Lien externe' : file.size}</span>
                             <span>•</span>
-                            <span className="text-purple-600 font-medium">PNG</span>
+                            <span className="text-purple-600 font-medium">{file.url ? 'Ouverture web' : 'Téléchargement'}</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          {file.fileData && (
+                          {toSafeExternalUrl(file.url || '') ? (
+                            <a
+                              href={toSafeExternalUrl(file.url || '') || '#'}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+                              title="Ouvrir le fichier"
+                            >
+                              <ExternalLink size={16} />
+                              Ouvrir
+                            </a>
+                          ) : file.fileData ? (
                             <button
                               onClick={() => downloadFile(file)}
-                              className="p-2 text-purple-600 hover:bg-purple-100 rounded-lg transition-colors"
-                              title="Télécharger le fichier PNG"
+                              className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+                              title="Télécharger le fichier"
                             >
-                              <Download size={18} />
+                              <Download size={16} />
+                              Télécharger
                             </button>
-                          )}
+                          ) : null}
                         </div>
                       </div>
                     ))

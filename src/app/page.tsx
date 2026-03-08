@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, Plus, Search, Edit2, Trash2, X, Save, Building2, ExternalLink, Copy, Check, Upload, Download, Lock, LogOut, Image as ImageIcon, MessageSquare, RefreshCcw } from "lucide-react";
+import { Users, Plus, Search, Edit2, Trash2, X, Save, Building2, ExternalLink, Copy, Check, Lock, LogOut, Image as ImageIcon, MessageSquare, RefreshCcw } from "lucide-react";
 import Chat from "@/components/chat";
 import AdminMessaging from '@/components/admin-messaging';
 import { io } from 'socket.io-client';
@@ -21,6 +21,7 @@ interface Step {
     date: string;
     size: string;
     status: 'completed' | 'in-progress' | 'pending';
+    url?: string;
     fileData?: string; // Base64 data for PNG files
     fileType?: string;
   }
@@ -28,6 +29,7 @@ interface Step {
   // Type pour la gestion du formulaire d'ajout de fichier
   interface NewFile {
     name: string;
+    url: string;
     date: string;
     status: 'completed' | 'in-progress' | 'pending';
     size?: string;
@@ -86,6 +88,21 @@ const clampProgression = (value: unknown) => {
   return Math.min(100, Math.max(0, Math.round(parsed)));
 };
 
+const toSafeExternalUrl = (value: string) => {
+  const candidate = value.trim();
+  if (!candidate) return null;
+
+  try {
+    const parsed = new URL(candidate.startsWith('http') ? candidate : `https://${candidate}`);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+};
+
 const createLocalId = (value: string) => {
   if (!value) {
     return Date.now();
@@ -117,6 +134,7 @@ const normalizeProject = (project: Partial<Project> | null | undefined): Project
       date: typeof file?.date === 'string' ? file.date : fallback.startDate,
       size: typeof file?.size === 'string' ? file.size : '-',
       status: file?.status === 'completed' || file?.status === 'in-progress' ? file.status : 'pending',
+      url: typeof file?.url === 'string' ? file.url.trim() : undefined,
       fileData: typeof file?.fileData === 'string' ? file.fileData : undefined,
       fileType: typeof file?.fileType === 'string' ? file.fileType : undefined,
     })),
@@ -195,8 +213,7 @@ const App: React.FC = () => {
   const [showAddStepModal, setShowAddStepModal] = useState(false);
   const [newStep, setNewStep] = useState({ name: '', date: '', status: 'En cours' as const });
   const [showAddFileModal, setShowAddFileModal] = useState(false);
-  const [newFile, setNewFile] = useState<NewFile>({ name: '', date: new Date().toISOString().split('T')[0], status: 'completed', size: '' });
-  const [uploadingFile, setUploadingFile] = useState<File | null>(null);
+  const [newFile, setNewFile] = useState<NewFile>({ name: '', url: '', date: new Date().toISOString().split('T')[0], status: 'completed', size: '' });
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showChatModal, setShowChatModal] = useState(false);
   const [selectedChatClient, setSelectedChatClient] = useState<Client | null>(null);
@@ -672,66 +689,31 @@ const App: React.FC = () => {
     }));
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      // Vérifier si c'est un fichier PNG
-      if (!file.type.includes('png')) {
-        alert('Seuls les fichiers PNG sont autorisés');
-        return;
-      }
-      
-      // Vérifier la taille (max 2MB)
-      if (file.size > 2 * 1024 * 1024) {
-        alert('La taille du fichier ne doit pas dépasser 2MB');
-        return;
-      }
-      
-      setUploadingFile(file);
-      const sizeInKB = (file.size / 1024).toFixed(2);
-      setNewFile({ ...newFile, name: file.name, size: `${sizeInKB} KB` });
-    }
-  };
+  const handleAddFile = () => {
+    if (!editingProject) return;
 
-  const handleAddFile = async () => {
-    if (newFile.name && uploadingFile && editingProject) {
-      try {
-        const base64Data = await fileToBase64(uploadingFile);
-        
-        const file: ProjectFile = {
-          id: Date.now(),
-          name: newFile.name,
-          date: newFile.date,
-          size: newFile.size || '-',
-          status: newFile.status,
-          fileData: base64Data,
-          fileType: uploadingFile.type
-        };
-        
-        updateEditingProject((current) => ({
-          ...current,
-          project: { ...current.project, files: [...current.project.files, file] }
-        }));
-        
-        setNewFile({ name: '', date: new Date().toISOString().split('T')[0], status: 'completed', size: '' });
-        setUploadingFile(null);
-        setShowAddFileModal(false);
-        
-        console.log('📤 Fichier PNG ajouté et stocké:', file);
-      } catch (error) {
-        console.error('Erreur lors du traitement du fichier:', error);
-        alert('Erreur lors du traitement du fichier');
-      }
+    const safeUrl = toSafeExternalUrl(newFile.url);
+    if (!newFile.name.trim() || !safeUrl) {
+      alert('Veuillez saisir un nom et un lien valide');
+      return;
     }
-  };
 
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = error => reject(error);
-    });
+    const file: ProjectFile = {
+      id: Date.now(),
+      name: newFile.name.trim(),
+      date: newFile.date,
+      size: 'Lien externe',
+      status: newFile.status,
+      url: safeUrl,
+    };
+
+    updateEditingProject((current) => ({
+      ...current,
+      project: { ...current.project, files: [...current.project.files, file] }
+    }));
+
+    setNewFile({ name: '', url: '', date: new Date().toISOString().split('T')[0], status: 'completed', size: '' });
+    setShowAddFileModal(false);
   };
 
   const handleDeleteFile = (fileId: number) => {
@@ -749,23 +731,6 @@ const App: React.FC = () => {
         files: current.project.files.map((file) => file.id === fileId ? { ...file, [field]: value } : file)
       }
     }));
-  };
-
-  const downloadFile = (file: ProjectFile) => {
-    if (file.fileData) {
-      try {
-        // Créer un lien de téléchargement
-        const link = document.createElement('a');
-        link.href = file.fileData;
-        link.download = file.name;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      } catch (error) {
-        console.error('Erreur lors du téléchargement:', error);
-        alert('Erreur lors du téléchargement du fichier');
-      }
-    }
   };
 
   const filteredClients = clients.filter(c => 
@@ -1060,18 +1025,18 @@ const App: React.FC = () => {
 
           <div className="bg-white rounded-lg shadow-sm p-8 mt-6">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold">Fichiers PNG du Projet</h2>
+              <h2 className="text-xl font-bold">Liens de fichiers du projet</h2>
               <button
                 onClick={() => setShowAddFileModal(true)}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
               >
-                <Upload size={20} />
-                Ajouter un PNG
+                <ExternalLink size={20} />
+                Ajouter un lien
               </button>
             </div>
 
             {(!editingProject.project.files || editingProject.project.files.length === 0) ? (
-              <p className="text-gray-500 text-center py-8">Aucun fichier PNG ajouté</p>
+              <p className="text-gray-500 text-center py-8">Aucun lien de fichier ajouté</p>
             ) : (
               <div className="space-y-4">
                 {editingProject.project.files.map(file => (
@@ -1095,9 +1060,13 @@ const App: React.FC = () => {
                             className="text-sm px-2 py-1 border border-transparent hover:border-gray-300 rounded focus:outline-none focus:border-blue-500"
                           />
                           <span>•</span>
-                          <span>{file.size}</span>
-                          <span>•</span>
-                          <span className="text-purple-600 font-medium">PNG</span>
+                          <input
+                            type="url"
+                            value={file.url || ''}
+                            onChange={(e) => handleUpdateFile(file.id, 'url', e.target.value)}
+                            placeholder="https://..."
+                            className="min-w-[260px] text-sm px-2 py-1 border border-transparent hover:border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                          />
                         </div>
                       </div>
                     </div>
@@ -1111,13 +1080,17 @@ const App: React.FC = () => {
                         <option value="in-progress">En préparation</option>
                         <option value="pending">Bientôt</option>
                       </select>
-                      <button
-                        onClick={() => downloadFile(file)}
-                        className="p-2 text-purple-600 hover:bg-purple-100 rounded-lg transition-colors"
-                        title="Télécharger le fichier"
-                      >
-                        <Download size={18} />
-                      </button>
+                      {toSafeExternalUrl(file.url || '') && (
+                        <a
+                          href={toSafeExternalUrl(file.url || '') || '#'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2 text-purple-600 hover:bg-purple-100 rounded-lg transition-colors"
+                          title="Ouvrir le lien"
+                        >
+                          <ExternalLink size={18} />
+                        </a>
+                      )}
                       <button
                         onClick={() => handleDeleteFile(file.id)}
                         className="text-red-500 hover:text-red-700"
@@ -1136,12 +1109,11 @@ const App: React.FC = () => {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-lg p-8 max-w-md w-full">
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold">Ajouter un fichier PNG</h2>
+                <h2 className="text-2xl font-bold">Ajouter un lien de fichier</h2>
                 <button
                   onClick={() => {
                     setShowAddFileModal(false);
-                    setNewFile({ name: '', date: new Date().toISOString().split('T')[0], status: 'completed', size: '' });
-                    setUploadingFile(null);
+                    setNewFile({ name: '', url: '', date: new Date().toISOString().split('T')[0], status: 'completed', size: '' });
                   }}
                   className="text-gray-400 hover:text-gray-600"
                 >
@@ -1152,40 +1124,26 @@ const App: React.FC = () => {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium mb-2">
-                    Sélectionner un fichier PNG <span className="text-red-500">*</span>
-                  </label>
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-purple-500 transition-colors cursor-pointer">
-                    <input
-                      type="file"
-                      accept=".png,image/png"
-                      onChange={handleFileUpload}
-                      className="hidden"
-                      id="file-upload"
-                    />
-                    <label htmlFor="file-upload" className="cursor-pointer">
-                      <ImageIcon className="mx-auto mb-2 text-gray-400" size={32} />
-                      <p className="text-sm text-gray-600">
-                        {uploadingFile ? uploadingFile.name : 'Cliquez pour choisir un fichier PNG'}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">Max: 2MB • Format: PNG uniquement</p>
-                      {uploadingFile && (
-                        <p className="text-xs text-gray-500 mt-1">
-                          Taille: {newFile.size}
-                        </p>
-                      )}
-                    </label>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Nom d'affichage
+                    Nom d'affichage <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     value={newFile.name}
                     onChange={(e) => setNewFile({ ...newFile, name: e.target.value })}
-                    placeholder="Ex: maquette-finale.png"
+                    placeholder="Ex: Maquette Figma"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Lien du fichier <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="url"
+                    value={newFile.url}
+                    onChange={(e) => setNewFile({ ...newFile, url: e.target.value })}
+                    placeholder="https://..."
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                   />
                 </div>
@@ -1218,8 +1176,7 @@ const App: React.FC = () => {
                 <button
                   onClick={() => {
                     setShowAddFileModal(false);
-                    setNewFile({ name: '', date: new Date().toISOString().split('T')[0], status: 'completed', size: '' });
-                    setUploadingFile(null);
+                    setNewFile({ name: '', url: '', date: new Date().toISOString().split('T')[0], status: 'completed', size: '' });
                   }}
                   className="flex-1 px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50"
                 >
@@ -1227,7 +1184,7 @@ const App: React.FC = () => {
                 </button>
                 <button
                   onClick={handleAddFile}
-                  disabled={!uploadingFile}
+                  disabled={!newFile.name.trim() || !toSafeExternalUrl(newFile.url)}
                   className="flex-1 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Ajouter
@@ -1734,7 +1691,7 @@ const App: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-2">Fichiers PNG du projet</label>
+                  <label className="block text-sm font-medium mb-2">Liens de fichiers du projet</label>
                   <div className="space-y-2">
                     {editingProject.project.files?.map((file, index) => (
                       <div key={file.id ?? index} className="flex items-center gap-2">
@@ -1750,6 +1707,21 @@ const App: React.FC = () => {
                               project: { ...editingProject.project, files: newFiles }
                             });
                           }}
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <input
+                          type="url"
+                          value={file.url || ''}
+                          onChange={(e) => {
+                            const newFiles = editingProject.project.files.map((f, i) =>
+                              i === index ? { ...f, url: e.target.value } : f
+                            );
+                            setEditingProject({
+                              ...editingProject,
+                              project: { ...editingProject.project, files: newFiles }
+                            });
+                          }}
+                          placeholder="https://..."
                           className="flex-1 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                         <button
@@ -1770,7 +1742,7 @@ const App: React.FC = () => {
                       onClick={() => {
                         const newFiles = [
                           ...(editingProject.project.files || []),
-                          { id: Date.now(), name: '', date: new Date().toISOString().split('T')[0], size: '0 KB', status: 'pending' as const, fileType: 'image/png', fileData: '' }
+                          { id: Date.now(), name: '', url: '', date: new Date().toISOString().split('T')[0], size: 'Lien externe', status: 'pending' as const }
                         ];
                         setEditingProject({ 
                           ...editingProject, 
@@ -1779,7 +1751,7 @@ const App: React.FC = () => {
                       }}
                       className="text-blue-600 hover:text-blue-700 text-sm font-medium"
                     >
-                      + Ajouter un fichier PNG
+                      + Ajouter un lien
                     </button>
                   </div>
                 </div>

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { MessageCircle, Send, User, Clock, CheckCircle, Trash2 } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
+import { TypingIndicator } from '@/components/typing-indicator';
 
 interface Message {
   id: string;
@@ -257,6 +258,14 @@ export default function AdminMessaging() {
     };
   }, [selectedConversation?.id]);
 
+  useEffect(() => {
+    if (!partnerTyping) return;
+    const t = window.setTimeout(() => {
+      inputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }, 80);
+    return () => window.clearTimeout(t);
+  }, [partnerTyping]);
+
   const selectConversation = async (conversation: Conversation) => {
     // Quitter l'ancienne room si nécessaire
     if (socket && selectedConversation?.id) {
@@ -485,15 +494,13 @@ export default function AdminMessaging() {
                   </div>
                 </div>
               ))}
+              {partnerTyping && (
+                <TypingIndicator label="Le client est en train d'écrire..." />
+              )}
             </div>
 
             {/* Zone d'envoi */}
             <div className="p-4 border-t border-gray-200 bg-white">
-              {partnerTyping && (
-                <div className="text-xs text-gray-500 mb-1">
-                  Le client est en train d’écrire...
-                </div>
-              )}
               <div className="flex space-x-2">
                 <textarea
                   ref={inputRef}
