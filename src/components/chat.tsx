@@ -221,7 +221,6 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
 
   useEffect(() => {
     if (!conversationId || !currentUser?.id) return;
-    const intervalMs = isConnected ? 15000 : 3000;
     const t = window.setInterval(async () => {
       try {
         const res = await fetch(withPortalToken(`/api/conversations/${conversationId}/messages`));
@@ -249,9 +248,9 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
           } catch {}
         }
       } catch {}
-    }, intervalMs);
+    }, 1500);
     return () => window.clearInterval(t);
-  }, [conversationId, currentUser?.id, isConnected, portalToken]);
+  }, [conversationId, currentUser?.id, portalToken]);
 
   useEffect(() => {
     const delay = getPerfDelay();
@@ -284,47 +283,23 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
   }, [input]);
 
   const sendMessage = async () => {
-    // Autoriser l'envoi même sans connexion socket (fallback HTTP)
     if (!input.trim()) return;
     const content = input.trim();
+    const clientTempId = `temp-${Date.now()}`;
+    const optimisticMessage: Message = {
+      id: clientTempId,
+      clientTempId,
+      content,
+      senderId: currentUser.id,
+      conversationId,
+      createdAt: new Date().toISOString(),
+      read: false,
+    };
 
-    if (socket?.connected) {
-      const clientTempId = `temp-${Date.now()}`;
-      const optimisticMessage: Message = {
-        id: clientTempId,
-        clientTempId,
-        content,
-        senderId: currentUser.id,
-        conversationId,
-        createdAt: new Date().toISOString(),
-        read: false,
-      };
-
-      setMessages((prev) => [...prev, optimisticMessage]);
-      setInput("");
-      setSendError(null);
-      setMessageActionError(null);
-
-      const result = await new Promise<{ ok: boolean; message?: Message; error?: string }>((resolve) => {
-        socket.emit("sendMessage", { conversationId, content, clientTempId }, resolve);
-      });
-
-      if (result.ok && result.message) {
-        prevIdsRef.current.add(result.message.id);
-        setMessages((prev) => {
-          const withoutTemp = prev.filter((message) => message.id !== clientTempId);
-          return withoutTemp.some((message) => message.id === result.message!.id)
-            ? withoutTemp
-            : [...withoutTemp, result.message!];
-        });
-        return;
-      }
-
-      setMessages((prev) => prev.filter((message) => message.id !== clientTempId));
-      setInput(content);
-      setSendError(result.error || "Échec de l'envoi du message");
-      return;
-    }
+    setMessages((prev) => [...prev, optimisticMessage]);
+    setInput("");
+    setSendError(null);
+    setMessageActionError(null);
 
     try {
       const res = await fetch(withPortalToken(`/api/conversations/${conversationId}/messages`), {
@@ -335,11 +310,18 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
 
       if (res.ok) {
         const created = await res.json();
-        setMessages(prev => prev.some(m => m.id === created.id) ? prev : [...prev, created]);
-        setInput("");
+        prevIdsRef.current.add(created.id);
+        setMessages((prev) => {
+          const withoutTemp = prev.filter((message) => message.id !== clientTempId);
+          return withoutTemp.some((message) => message.id === created.id)
+            ? withoutTemp
+            : [...withoutTemp, created];
+        });
         setSendError(null);
         setMessageActionError(null);
       } else {
+        setMessages((prev) => prev.filter((message) => message.id !== clientTempId));
+        setInput(content);
         try {
           const err = await res.json();
           setSendError(typeof err?.error === "string" ? err.error : "Échec de l'envoi du message");
@@ -348,6 +330,8 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
         }
       }
     } catch (error) {
+      setMessages((prev) => prev.filter((message) => message.id !== clientTempId));
+      setInput(content);
       console.error("Erreur lors de l'envoi du message:", error);
       setSendError("Erreur réseau lors de l'envoi du message");
     }
@@ -393,10 +377,6 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
           </div>
           <div>
             <h3 className="font-semibold">Chat Support</h3>
-            <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
-              <span className="text-sm text-gray-300">{isConnected ? 'En ligne' : 'Hors ligne'}</span>
-            </div>
           </div>
         </div>
       </div>

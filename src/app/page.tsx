@@ -457,7 +457,7 @@ const App: React.FC = () => {
         const delta = Math.max(0, total - baselineUnreadRef.current);
         setNewMessageCount(delta);
       } catch {}
-    }, 10000);
+    }, 2000);
     return () => window.clearInterval(t);
   }, [isAuthenticated, adminUserId]);
 

@@ -323,56 +323,23 @@ export default function AdminMessaging() {
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedConversation) return;
     const content = newMessage.trim();
+    const clientTempId = `temp-${Date.now()}`;
+    const optimisticMessage: Message = {
+      id: clientTempId,
+      clientTempId,
+      content,
+      senderId: ADMIN_USER_ID,
+      conversationId: selectedConversation.id,
+      createdAt: new Date().toISOString(),
+      read: false,
+    };
 
-    if (socket?.connected) {
-      const clientTempId = `temp-${Date.now()}`;
-      const optimisticMessage: Message = {
-        id: clientTempId,
-        clientTempId,
-        content,
-        senderId: ADMIN_USER_ID,
-        conversationId: selectedConversation.id,
-        createdAt: new Date().toISOString(),
-        read: false,
-      };
-
-      setSelectedConversation(prev => {
-        if (!prev) return prev;
-        return { ...prev, messages: [...(prev.messages || []), optimisticMessage] };
-      });
-      setNewMessage('');
-      setSendError(null);
-
-      const result = await new Promise<{ ok: boolean; message?: Message; error?: string }>((resolve) => {
-        socket.emit('sendMessage', { conversationId: selectedConversation.id, content, clientTempId }, resolve);
-      });
-
-      if (result.ok && result.message) {
-        setSelectedConversation(prev => {
-          if (!prev) return prev;
-          const withoutTemp = (prev.messages || []).filter((message) => message.id !== clientTempId);
-          return {
-            ...prev,
-            messages: withoutTemp.some((message) => message.id === result.message!.id)
-              ? withoutTemp
-              : [...withoutTemp, result.message!],
-          };
-        });
-        await fetchConversations();
-        return;
-      }
-
-      setSelectedConversation(prev => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          messages: (prev.messages || []).filter((message) => message.id !== clientTempId),
-        };
-      });
-      setNewMessage(content);
-      setSendError(result.error || 'Échec de l’envoi du message');
-      return;
-    }
+    setSelectedConversation(prev => {
+      if (!prev) return prev;
+      return { ...prev, messages: [...(prev.messages || []), optimisticMessage] };
+    });
+    setNewMessage('');
+    setSendError(null);
 
     try {
       const res = await fetch(`/api/conversations/${selectedConversation.id}/messages`, {
@@ -387,17 +354,27 @@ export default function AdminMessaging() {
 
       if (res.ok) {
         const sentMessage = await res.json();
-        // Mettre à jour la conversation localement en évitant les doublons
         setSelectedConversation(prev => {
-          if (!prev) return null;
-          const msgs = prev.messages || [];
-          const exists = msgs.some(m => m.id === sentMessage.id);
-          const nextMsgs = exists ? msgs : [...msgs, sentMessage];
-          return { ...prev, messages: nextMsgs };
+          if (!prev) return prev;
+          const withoutTemp = (prev.messages || []).filter((message) => message.id !== clientTempId);
+          return {
+            ...prev,
+            messages: withoutTemp.some((message) => message.id === sentMessage.id)
+              ? withoutTemp
+              : [...withoutTemp, sentMessage],
+          };
         });
-        setNewMessage('');
         setSendError(null);
+        await fetchConversations();
       } else {
+        setSelectedConversation(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            messages: (prev.messages || []).filter((message) => message.id !== clientTempId),
+          };
+        });
+        setNewMessage(content);
         let errMsg = 'Échec de l’envoi du message';
         try {
           const payload = await res.json();
@@ -407,6 +384,14 @@ export default function AdminMessaging() {
         console.error('Erreur lors de l’envoi du message:', errMsg);
       }
     } catch (error) {
+      setSelectedConversation(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          messages: (prev.messages || []).filter((message) => message.id !== clientTempId),
+        };
+      });
+      setNewMessage(content);
       setSendError('Erreur réseau lors de l’envoi du message');
       console.error('Erreur lors de l\'envoi du message:', error);
     }
