@@ -44,6 +44,7 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
   const onNewMessageRef = useRef<(() => void) | undefined>(onNewMessage);
   useEffect(() => { onNewMessageRef.current = onNewMessage; }, [onNewMessage]);
   const prevIdsRef = useRef<Set<string>>(new Set());
+  const pendingSendCountRef = useRef(0);
 
   const dedupeMessages = (list: Message[]) => {
     const seen = new Set<string>();
@@ -130,7 +131,7 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
     };
 
     loadMessages();
-  }, [conversationId]);
+  }, [conversationId, portalToken]);
 
   // Setup socket connection (stabilisé: dépend seulement de conversationId et currentUser.id)
   useEffect(() => {
@@ -222,6 +223,7 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
   useEffect(() => {
     if (!conversationId || !currentUser?.id) return;
     const t = window.setInterval(async () => {
+      if (pendingSendCountRef.current > 0) return;
       try {
         const res = await fetch(withPortalToken(`/api/conversations/${conversationId}/messages`));
         if (!res.ok) return;
@@ -296,6 +298,7 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
       read: false,
     };
 
+    pendingSendCountRef.current += 1;
     setMessages((prev) => [...prev, optimisticMessage]);
     setInput("");
     setSendError(null);
@@ -334,6 +337,8 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
       setInput(content);
       console.error("Erreur lors de l'envoi du message:", error);
       setSendError("Erreur réseau lors de l'envoi du message");
+    } finally {
+      pendingSendCountRef.current = Math.max(0, pendingSendCountRef.current - 1);
     }
   };
 

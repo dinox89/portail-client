@@ -42,6 +42,9 @@ export default function AdminMessaging() {
   const pollRef = useRef<number | null>(null);
   const selectedConvIdRef = useRef<string | null>(null);
   const autoSelectedRef = useRef<boolean>(false);
+  const selectedConversationRef = useRef<Conversation | null>(null);
+  const conversationsRef = useRef<Conversation[]>([]);
+  const pendingSendCountRef = useRef(0);
 
   const renderMessageContent = (content: string) => {
     const regex = /((?:https?:\/\/|www\.)[^\s]+|(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?:\/[^\s]*)?)/g;
@@ -99,6 +102,14 @@ export default function AdminMessaging() {
     const next = Math.min(el.scrollHeight, maxHeight);
     el.style.height = `${next}px`;
   }, [newMessage]);
+
+  useEffect(() => {
+    selectedConversationRef.current = selectedConversation;
+  }, [selectedConversation]);
+
+  useEffect(() => {
+    conversationsRef.current = conversations;
+  }, [conversations]);
 
   useEffect(() => {
     const attempts = Number(process.env.NEXT_PUBLIC_SOCKET_RECONNECT_ATTEMPTS ?? 20);
@@ -210,12 +221,12 @@ export default function AdminMessaging() {
 
   const fetchConversations = async () => {
     try {
-      // Récupérer toutes les conversations (endpoint à créer)
       const res = await fetch('/api/conversations/admin');
       if (res.ok) {
         const data = await res.json();
+        conversationsRef.current = data;
         setConversations(data);
-        if (!autoSelectedRef.current && !selectedConversation && Array.isArray(data) && data.length > 0) {
+        if (!autoSelectedRef.current && !selectedConversationRef.current && Array.isArray(data) && data.length > 0) {
           const preferred = data.find((c: any) => (c.unreadCount || 0) > 0) || data[0];
           if (preferred) {
             await selectConversation(preferred);
@@ -253,22 +264,25 @@ export default function AdminMessaging() {
   useEffect(() => {
     if (pollRef.current) window.clearInterval(pollRef.current);
     pollRef.current = window.setInterval(async () => {
+      if (pendingSendCountRef.current > 0) return;
       await fetchConversations();
-      if (selectedConversation?.id) {
-        const currentConv = (conversations || []).find(c => c.id === selectedConversation.id);
+      const currentSelectedConversation = selectedConversationRef.current;
+      if (currentSelectedConversation?.id) {
+        const currentConv = conversationsRef.current.find(c => c.id === currentSelectedConversation.id);
         const currLastId = currentConv?.lastMessage?.id;
-        const prevLastId = selectedConversation.lastMessage?.id;
+        const prevLastId = currentSelectedConversation.messages?.[currentSelectedConversation.messages.length - 1]?.id
+          || currentSelectedConversation.lastMessage?.id;
         if (!currLastId || currLastId !== prevLastId) {
-          const msgs = await loadConversationMessages(selectedConversation.id);
+          const msgs = await loadConversationMessages(currentSelectedConversation.id);
           setSelectedConversation(prev => prev ? { ...prev, messages: msgs, lastMessage: currentConv?.lastMessage || prev.lastMessage } : prev);
         }
       }
-    }, 3000);
+    }, 1500);
     return () => {
       if (pollRef.current) window.clearInterval(pollRef.current);
       pollRef.current = null;
     };
-  }, [selectedConversation?.id]);
+  }, []);
 
   useEffect(() => {
     if (!selectedConversation?.id) {
@@ -334,6 +348,7 @@ export default function AdminMessaging() {
       read: false,
     };
 
+    pendingSendCountRef.current += 1;
     setSelectedConversation(prev => {
       if (!prev) return prev;
       return { ...prev, messages: [...(prev.messages || []), optimisticMessage] };
@@ -394,6 +409,8 @@ export default function AdminMessaging() {
       setNewMessage(content);
       setSendError('Erreur réseau lors de l’envoi du message');
       console.error('Erreur lors de l\'envoi du message:', error);
+    } finally {
+      pendingSendCountRef.current = Math.max(0, pendingSendCountRef.current - 1);
     }
   };
 

@@ -1,161 +1,146 @@
-# 🚀 Welcome to Z.ai Code Scaffold
+# Portail Client
 
-A modern, production-ready web application scaffold powered by cutting-edge technologies, designed to accelerate your development with [Z.ai](https://chat.z.ai)'s AI-powered coding assistance.
+Application Next.js pour gerer des portails clients partages avec suivi de projet, videos YouTube, fichiers par liens externes et messagerie admin <-> client.
 
-## ✨ Technology Stack
+## Fonctionnalites
 
-This scaffold provides a robust foundation built with:
+- Back-office administrateur pour creer et modifier les clients
+- Portail client partage via un lien unique avec token
+- Sections client:
+  - Introduction
+  - Mon projet
+  - Formulaire
+  - Chat
+  - Mes fichiers
+  - Rapport de votre site
+- Videos YouTube legeres:
+  - video d'introduction
+  - plusieurs videos de rapport de site
+- Fichiers projet via liens externes, sans upload serveur
+- Chat admin/client avec suppression de ses propres messages
+- Notifications de nouveaux messages et compteur de non lus
+- `Last seen` cote admin
+- Persistance Postgres via Prisma
+- Socket.IO pour le temps reel avec resynchronisation HTTP rapide en secours
 
-### 🎯 Core Framework
-- **⚡ Next.js 15** - The React framework for production with App Router
-- **📘 TypeScript 5** - Type-safe JavaScript for better developer experience
-- **🎨 Tailwind CSS 4** - Utility-first CSS framework for rapid UI development
+## Stack
 
-### 🧩 UI Components & Styling
-- **🧩 shadcn/ui** - High-quality, accessible components built on Radix UI
-- **🎯 Lucide React** - Beautiful & consistent icon library
-- **🌈 Framer Motion** - Production-ready motion library for React
-- **🎨 Next Themes** - Perfect dark mode in 2 lines of code
+- Next.js 15
+- React 19
+- TypeScript
+- Tailwind CSS
+- Prisma + PostgreSQL
+- Socket.IO
+- serveur Node personnalise via `server.ts`
 
-### 📋 Forms & Validation
-- **🎣 React Hook Form** - Performant forms with easy validation
-- **✅ Zod** - TypeScript-first schema validation
-
-### 🔄 State Management & Data Fetching
-- **🐻 Zustand** - Simple, scalable state management
-- **🔄 TanStack Query** - Powerful data synchronization for React
-- **🌐 Axios** - Promise-based HTTP client
-
-### 🗄️ Database & Backend
-- **🗄️ Prisma** - Next-generation Node.js and TypeScript ORM
-- **🔐 NextAuth.js** - Complete open-source authentication solution
-
-### 🎨 Advanced UI Features
-- **📊 TanStack Table** - Headless UI for building tables and datagrids
-- **🖱️ DND Kit** - Modern drag and drop toolkit for React
-- **📊 Recharts** - Redefined chart library built with React and D3
-- **🖼️ Sharp** - High performance image processing
-
-### 🌍 Internationalization & Utilities
-- **🌍 Next Intl** - Internationalization library for Next.js
-- **📅 Date-fns** - Modern JavaScript date utility library
-- **🪝 ReactUse** - Collection of essential React hooks for modern development
-
-## 🎯 Why This Scaffold?
-
-- **🏎️ Fast Development** - Pre-configured tooling and best practices
-- **🎨 Beautiful UI** - Complete shadcn/ui component library with advanced interactions
-- **🔒 Type Safety** - Full TypeScript configuration with Zod validation
-- **📱 Responsive** - Mobile-first design principles with smooth animations
-- **🗄️ Database Ready** - Prisma ORM configured for rapid backend development
-- **🔐 Auth Included** - NextAuth.js for secure authentication flows
-- **📊 Data Visualization** - Charts, tables, and drag-and-drop functionality
-- **🌍 i18n Ready** - Multi-language support with Next Intl
-- **🚀 Production Ready** - Optimized build and deployment settings
-- **🤖 AI-Friendly** - Structured codebase perfect for AI assistance
-
-## 🚀 Quick Start
+## Scripts
 
 ```bash
-# Install dependencies
-npm install
-
-# Start development server
 npm run dev
-
-# Build for production
 npm run build
-
-# Start production server
-npm start
+npm run start
+npm run build:deploy
+npm run db:generate
+npm run db:push
+npm run migrate:deploy
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to see your application running.
+## Variables d'environnement
 
-## 🤖 Powered by Z.ai
+Copiez `.env.example` puis completez:
 
-This scaffold is optimized for use with [Z.ai](https://chat.z.ai) - your AI assistant for:
-
-- **💻 Code Generation** - Generate components, pages, and features instantly
-- **🎨 UI Development** - Create beautiful interfaces with AI assistance  
-- **🔧 Bug Fixing** - Identify and resolve issues with intelligent suggestions
-- **📝 Documentation** - Auto-generate comprehensive documentation
-- **🚀 Optimization** - Performance improvements and best practices
-
-Ready to build something amazing? Start chatting with Z.ai at [chat.z.ai](https://chat.z.ai) and experience the future of AI-powered development!
-
-## 📁 Project Structure
-
-```
-src/
-├── app/                 # Next.js App Router pages
-├── components/          # Reusable React components
-│   └── ui/             # shadcn/ui components
-├── hooks/              # Custom React hooks
-└── lib/                # Utility functions and configurations
+```bash
+NEXT_PUBLIC_ADMIN_USER_ID=
+ADMIN_EMAIL=
+ADMIN_PASSWORD=
+ADMIN_SESSION_SECRET=
+REALTIME_JWT_SECRET=
+DATABASE_URL=
+ALLOWED_ORIGINS=
+PORT=3000
 ```
 
-## 🎨 Available Features & Components
+Variables optionnelles pour ajuster le comportement Socket.IO:
 
-This scaffold includes a comprehensive set of modern web development tools:
+```bash
+NEXT_PUBLIC_SOCKET_RECONNECT_ATTEMPTS=10
+NEXT_PUBLIC_SOCKET_RECONNECT_DELAY=500
+NEXT_PUBLIC_SOCKET_RECONNECT_DELAY_MAX=10000
+NEXT_PUBLIC_SOCKET_TIMEOUT=8000
+NEXT_PUBLIC_PERF_DELAY=0
+```
 
-### 🧩 UI Components (shadcn/ui)
-- **Layout**: Card, Separator, Aspect Ratio, Resizable Panels
-- **Forms**: Input, Textarea, Select, Checkbox, Radio Group, Switch
-- **Feedback**: Alert, Toast (Sonner), Progress, Skeleton
-- **Navigation**: Breadcrumb, Menubar, Navigation Menu, Pagination
-- **Overlay**: Dialog, Sheet, Popover, Tooltip, Hover Card
-- **Data Display**: Badge, Avatar, Calendar
+## Demarrage local
 
-### 📊 Advanced Data Features
-- **Tables**: Powerful data tables with sorting, filtering, pagination (TanStack Table)
-- **Charts**: Beautiful visualizations with Recharts
-- **Forms**: Type-safe forms with React Hook Form + Zod validation
+1. Installez les dependances:
 
-### 🎨 Interactive Features
-- **Animations**: Smooth micro-interactions with Framer Motion
-- **Drag & Drop**: Modern drag-and-drop functionality with DND Kit
-- **Theme Switching**: Built-in dark/light mode support
+```bash
+npm install
+```
 
-### 🔐 Backend Integration
-- **Authentication**: Ready-to-use auth flows with NextAuth.js
-- **Database**: Type-safe database operations with Prisma
-- **API Client**: HTTP requests with Axios + TanStack Query
-- **State Management**: Simple and scalable with Zustand
+2. Generez Prisma:
 
-### 🌍 Production Features
-- **Internationalization**: Multi-language support with Next Intl
-- **Image Optimization**: Automatic image processing with Sharp
-- **Type Safety**: End-to-end TypeScript with Zod validation
-- **Essential Hooks**: 100+ useful React hooks with ReactUse for common patterns
+```bash
+npm run db:generate
+```
 
-## 🤝 Get Started with Z.ai
+3. Appliquez la base:
 
-1. **Clone this scaffold** to jumpstart your project
-2. **Visit [chat.z.ai](https://chat.z.ai)** to access your AI coding assistant
-3. **Start building** with intelligent code generation and assistance
-4. **Deploy with confidence** using the production-ready setup
+```bash
+npm run db:push
+```
 
----
+4. Lancez le projet:
 
-Built with ❤️ for the developer community. Supercharged by [Z.ai](https://chat.z.ai) 🚀
+```bash
+npm run dev
+```
 
-## Déploiement gratuit et sécurisé (Render + Neon)
+L'application utilise un serveur personnalise, donc le dev et la prod passent par `server.ts`.
 
-Déployez gratuitement avec WebSockets et une base Postgres managée.
+## Deploiement Railway
 
-- Créez une base Postgres gratuite sur Neon (https://neon.tech) et copiez l’URL (avec `?sslmode=require`).
-- Préparez les variables d’environnement (voir `.env.example`):
-  - `DATABASE_URL`: votre URL Neon
-  - `ALLOWED_ORIGINS`: domaines autorisés pour Socket.IO (ex: `https://votre-domaine.com`)
-  - `NEXT_PUBLIC_ADMIN_USER_ID`: ID de l’admin (ex: `admin-user-id`)
-  - `ADMIN_EMAIL`: email de l’admin (ex: `admin@example.com`)
-- Sur Render:
-  - Build Command: `npm install && npm run db:generate && npx prisma db push && npm run build`
-  - Start Command: `npm run start`
-  - WebSockets: support natif, pas de config supplémentaire
+Commande de build recommandee:
 
-Sécurité:
-- Postgres Neon via TLS (`sslmode=require`).
-- CORS Socket.IO verrouillé par `ALLOWED_ORIGINS`.
-- L’utilisateur admin est assuré au démarrage via `NEXT_PUBLIC_ADMIN_USER_ID`.
+```bash
+npm install --production=false && npm run build:deploy
+```
+
+Commande de demarrage:
+
+```bash
+npm run start
+```
+
+Points importants:
+
+- `DATABASE_URL` doit pointer vers PostgreSQL
+- `ALLOWED_ORIGINS` doit contenir l'URL publique Railway
+- `REALTIME_JWT_SECRET` doit etre defini en production
+- `NEXT_PUBLIC_ADMIN_USER_ID` doit etre stable entre tous les deploys
+
+## Architecture rapide
+
+- [server.ts](/Users/dinobenoit-loubere/Downloads/portail-client/server.ts): serveur Node + Next + Socket.IO
+- [src/app/page.tsx](/Users/dinobenoit-loubere/Downloads/portail-client/src/app/page.tsx): back-office administrateur
+- [src/app/portal/[id]/page.tsx](/Users/dinobenoit-loubere/Downloads/portail-client/src/app/portal/[id]/page.tsx): portail client
+- [src/components/chat.tsx](/Users/dinobenoit-loubere/Downloads/portail-client/src/components/chat.tsx): chat partage admin/client
+- [src/components/admin-messaging.tsx](/Users/dinobenoit-loubere/Downloads/portail-client/src/components/admin-messaging.tsx): messagerie admin complete
+- [src/lib/socket.ts](/Users/dinobenoit-loubere/Downloads/portail-client/src/lib/socket.ts): couche temps reel
+- [prisma/schema.prisma](/Users/dinobenoit-loubere/Downloads/portail-client/prisma/schema.prisma): schema base de donnees
+
+## Etat actuel
+
+Les mises a jour portail, videos, rapports, fichiers externes, progression, suppression de message et `last seen` sont bien integrees dans le code actuel.
+
+Le point le plus sensible reste la messagerie en production selon l'hebergement:
+
+- le temps reel Socket.IO est actif
+- une resynchronisation HTTP rapide est gardee en secours
+- si le temps reel est instable sur Railway, le chat doit quand meme se recaler rapidement sans perdre les messages
+
+## Notes
+
+- Les fichiers projet passent par des liens externes, pas par un stockage binaire dans l'application
+- Les videos YouTube utilisent des liens/embeds legerement charges pour eviter d'alourdir le portail
+- L'admin seed est assure au demarrage via `server.ts`
