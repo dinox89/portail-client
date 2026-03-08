@@ -2,7 +2,7 @@
 
 import { useRef, useState, useEffect } from "react";
 import { useParams } from "next/navigation";
-import { Download, CheckCircle, Clock, AlertCircle, Image as ImageIcon, MessageSquare, PlayCircle, ExternalLink } from "lucide-react";
+import { Download, CheckCircle, Clock, AlertCircle, MessageSquare, PlayCircle, ExternalLink } from "lucide-react";
 import Chat from "@/components/chat";
 import { ClientNotification } from "@/components/client-notification";
 
@@ -767,50 +767,36 @@ export default function ClientPage() {
                 <div className="p-6 sm:p-8 space-y-4">
                   {(!client.project.files || client.project.files.length === 0) ? (
                     <div className="text-center py-12 bg-gray-50 rounded-xl">
-                      <ImageIcon className="mx-auto mb-3 text-gray-400" size={48} />
                       <p className="text-gray-600">Aucun lien de fichier disponible pour le moment</p>
                     </div>
                   ) : (
-                    client.project.files.map(file => (
-                      <div key={file.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
-                        <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                          <ImageIcon className="text-purple-600" size={24} />
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-gray-900">{file.name}</h3>
-                          <div className="flex items-center gap-3 text-sm text-gray-600">
-                            <span>{formatDate(file.date)}</span>
-                            <span>•</span>
-                            <span>{file.url ? 'Lien externe' : file.size}</span>
-                            <span>•</span>
-                            <span className="text-purple-600 font-medium">{file.url ? 'Ouverture web' : 'Téléchargement'}</span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
+                    <div className="flex flex-col items-center justify-center gap-4 py-4">
+                      {client.project.files.map(file => (
+                        <div key={file.id} className="w-full max-w-xl text-center">
                           {toSafeExternalUrl(file.url || '') ? (
                             <a
                               href={toSafeExternalUrl(file.url || '') || '#'}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
-                              title="Ouvrir le fichier"
+                              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-slate-700 via-gray-800 to-zinc-900 px-6 py-4 text-sm font-bold text-white transition-all duration-300 hover:shadow-2xl"
+                              title={file.name}
                             >
                               <ExternalLink size={16} />
-                              Ouvrir
+                              Ouvrir {file.name}
                             </a>
                           ) : file.fileData ? (
                             <button
                               onClick={() => downloadFile(file)}
-                              className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
-                              title="Télécharger le fichier"
+                              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-slate-700 via-gray-800 to-zinc-900 px-6 py-4 text-sm font-bold text-white transition-all duration-300 hover:shadow-2xl"
+                              title={file.name}
                             >
                               <Download size={16} />
-                              Télécharger
+                              Télécharger {file.name}
                             </button>
                           ) : null}
                         </div>
-                      </div>
-                    ))
+                      ))}
+                    </div>
                   )}
                 </div>
               </div>
