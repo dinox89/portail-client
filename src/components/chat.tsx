@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from "react";
 import { Send, Trash2 } from "lucide-react";
 import { io, Socket } from "socket.io-client";
 import { getPerfDelay } from "@/lib/utils";
-import { TypingIndicator } from "@/components/typing-indicator";
 
 interface Message {
   id: string;
@@ -36,7 +35,6 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
   const [input, setInput] = useState("");
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [partnerTyping, setPartnerTyping] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [messageActionError, setMessageActionError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -44,8 +42,6 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
 
   const onNewMessageRef = useRef<(() => void) | undefined>(onNewMessage);
   useEffect(() => { onNewMessageRef.current = onNewMessage; }, [onNewMessage]);
-  const typingTimeoutRef = useRef<number | null>(null);
-  const typingActiveRef = useRef<boolean>(false);
   const prevIdsRef = useRef<Set<string>>(new Set());
 
   const dedupeMessages = (list: Message[]) => {
@@ -187,14 +183,6 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
         if (onNewMessageRef.current && message.senderId !== currentUser.id) {
           onNewMessageRef.current();
         }
-        if (message.senderId !== currentUser.id) {
-          setPartnerTyping(false);
-        }
-      }
-    });
-    newSocket.on("typing", (payload: { conversationId: string; userId: string; isTyping: boolean }) => {
-      if (payload.conversationId === conversationId && payload.userId !== currentUser.id) {
-        setPartnerTyping(payload.isTyping);
       }
     });
 
@@ -269,15 +257,6 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
   }, [conversationId, isConnected]);
 
   useEffect(() => {
-    if (!partnerTyping) return;
-    const delay = getPerfDelay();
-    const t = setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-    }, delay);
-    return () => clearTimeout(t);
-  }, [partnerTyping]);
-
-  useEffect(() => {
     if (!inputRef.current) return;
     const el = inputRef.current;
     el.style.height = "auto";
@@ -285,22 +264,6 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
     const next = Math.min(el.scrollHeight, maxHeight);
     el.style.height = `${next}px`;
   }, [input]);
-
-  const emitTypingStart = () => {
-    if (!socket || !isConnected || !conversationId) return;
-    if (!typingActiveRef.current) {
-      socket.emit("typing", { conversationId });
-      typingActiveRef.current = true;
-    }
-  };
-
-  const emitTypingStopImmediate = () => {
-    window.clearTimeout(typingTimeoutRef.current as any);
-    if (socket && isConnected && conversationId) {
-      socket.emit("stopTyping", { conversationId });
-    }
-    typingActiveRef.current = false;
-  };
 
   const sendMessage = async () => {
     // Autoriser l'envoi même sans connexion socket (fallback HTTP)
@@ -317,7 +280,6 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
         const created = await res.json();
         setMessages(prev => prev.some(m => m.id === created.id) ? prev : [...prev, created]);
         setInput("");
-        emitTypingStopImmediate();
         setSendError(null);
         setMessageActionError(null);
       } else {
@@ -423,11 +385,6 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
             );
           })
         )}
-        {partnerTyping && (
-          <TypingIndicator
-            label={currentUser.role === "user" ? "Le prestataire est en train d'écrire..." : "Le client est en train d'écrire..."}
-          />
-        )}
         <div ref={messagesEndRef} />
       </div>
 
@@ -437,16 +394,7 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
           <textarea
             ref={inputRef}
             value={input}
-            onChange={(e) => {
-              const v = e.target.value;
-              setInput(v);
-              if (v.trim().length > 0) {
-                emitTypingStart();
-              } else {
-                emitTypingStopImmediate();
-              }
-            }}
-            onBlur={emitTypingStopImmediate}
+            onChange={(e) => setInput(e.target.value)}
             placeholder="Tapez votre message..."
             className="flex-1 px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white resize-none min-h-[44px] max-h-40"
           />

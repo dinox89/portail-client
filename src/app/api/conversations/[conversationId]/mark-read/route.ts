@@ -47,6 +47,11 @@ export async function POST(
       },
     });
 
+    await (db as any).user.update({
+      where: { id: userId },
+      data: { lastSeenAt: new Date() },
+    }).catch(() => null);
+
     return NextResponse.json({ 
       success: true, 
       updatedCount: updatedMessages.count 

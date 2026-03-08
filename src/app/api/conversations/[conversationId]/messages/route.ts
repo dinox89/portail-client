@@ -97,6 +97,11 @@ export async function POST(
       },
     });
 
+    await prisma.user.update({
+      where: { id: senderId },
+      data: { lastSeenAt: new Date() },
+    }).catch(() => null);
+
     // Mettre à jour la date de mise à jour de la conversation
     await prisma.conversation.update({
       where: { id: conversationId },
@@ -204,6 +209,11 @@ export async function DELETE(
     if (message.senderId !== userId) {
       return NextResponse.json({ error: 'Vous pouvez supprimer uniquement vos propres messages' }, { status: 403 });
     }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { lastSeenAt: new Date() },
+    }).catch(() => null);
 
     await prisma.message.delete({
       where: { id: messageId },

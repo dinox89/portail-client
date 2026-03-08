@@ -22,7 +22,7 @@ export class SocketManager {
   private io: SocketIOServer;
   private userSockets: Map<string, UserSocket[]> = new Map();
   private socketToUser: Map<string, UserSocket> = new Map();
-  private lastTypingAt: Map<string, number> = new Map();
+  private lastPresenceWriteAt: Map<string, number> = new Map();
 
   constructor(server: HTTPServer) {
     const allowedOrigins = (() => {
@@ -93,6 +93,8 @@ export class SocketManager {
         role: user.role
       };
 
+      await this.touchLastSeen(userId, true);
+
       // Ajouter le socket à la liste des sockets de l'utilisateur
       if (!this.userSockets.has(userId)) {
         this.userSockets.set(userId, []);
@@ -122,6 +124,7 @@ export class SocketManager {
 
       // Heartbeat keepalive
       socket.on("heartbeat", (payload: any) => {
+        void this.touchLastSeen(userId);
         socket.emit("heartbeat_ack", { t: payload?.t || Date.now() });
       });
 
@@ -129,6 +132,8 @@ export class SocketManager {
       socket.on("sendMessage", async (data: { conversationId: string; content: string }) => {
         try {
           const { conversationId, content } = data;
+
+          await this.touchLastSeen(userId, true);
 
           // Créer le message
           const message = await db.message.create({
@@ -170,29 +175,12 @@ export class SocketManager {
         }
       });
 
-      socket.on("typing", (data: { conversationId: string }) => {
-        const { conversationId } = data || {};
-        if (conversationId) {
-          const now = Date.now();
-          const last = this.lastTypingAt.get(socket.id) || 0;
-          if (now - last >= 200) {
-            this.lastTypingAt.set(socket.id, now);
-            this.io.to(conversationId).emit("typing", { conversationId, userId, isTyping: true });
-          }
-        }
-      });
-
-      socket.on("stopTyping", (data: { conversationId: string }) => {
-        const { conversationId } = data || {};
-        if (conversationId) {
-          this.io.to(conversationId).emit("typing", { conversationId, userId, isTyping: false });
-        }
-      });
-
       // Marquer les messages comme lus
       socket.on("markAsRead", async (data: { conversationId: string; userId: string }) => {
         try {
           const { conversationId, userId: readerId } = data;
+
+          await this.touchLastSeen(readerId, true);
 
           const updatedMessages = await db.message.updateMany({
             where: {
@@ -254,6 +242,24 @@ export class SocketManager {
         }
       }
       this.socketToUser.delete(socketId);
+    }
+  }
+
+  private async touchLastSeen(userId: string, force = false) {
+    const now = Date.now();
+    const previousWrite = this.lastPresenceWriteAt.get(userId) || 0;
+    if (!force && now - previousWrite < 60000) {
+      return;
+    }
+
+    this.lastPresenceWriteAt.set(userId, now);
+    try {
+      await db.user.update({
+        where: { id: userId },
+        data: { lastSeenAt: new Date(now) },
+      });
+    } catch (error) {
+      console.warn(`Impossible de mettre à jour lastSeenAt pour ${userId}:`, error);
     }
   }
 

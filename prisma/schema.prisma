@@ -18,6 +18,7 @@ model User {
   email         String         @unique
   name          String?
   role          String         @default("user")
+  lastSeenAt    DateTime?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   conversations Conversation[] @relation("ConversationToUser")

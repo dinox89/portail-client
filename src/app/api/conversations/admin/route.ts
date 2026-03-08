@@ -32,6 +32,8 @@ export async function GET(request: Request) {
         users: conversation.users.map(user => ({
           id: user.id,
           name: user.name || 'Client',
+          role: user.role,
+          lastSeenAt: user.lastSeenAt,
         })),
         lastMessage: lastMessage ? {
           id: lastMessage.id,

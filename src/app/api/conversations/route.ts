@@ -28,22 +28,24 @@ export async function POST(request: Request) {
     // Make sure both users exist; create placeholder users if they don't.
     const user1 = await db.user.upsert({
       where: { id: userId1 },
-      update: {},
+      update: { lastSeenAt: new Date() },
       create: {
         id: userId1,
         email: `${userId1}@example.com`,
         name: `User ${userId1}`,
+        lastSeenAt: new Date(),
       },
     });
 
     const user2 = await db.user.upsert({
       where: { id: userId2 },
-      update: {},
+      update: { lastSeenAt: new Date() },
       create: {
         id: userId2,
         email: `${userId2}@example.com`,
         name: `User ${userId2}`,
         role: 'admin',
+        lastSeenAt: new Date(),
       },
     });
 

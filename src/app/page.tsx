@@ -22,7 +22,7 @@ interface Step {
     size: string;
     status: 'completed' | 'in-progress' | 'pending';
     url?: string;
-    fileData?: string; // Base64 data for PNG files
+    fileData?: string;
     fileType?: string;
   }
 
@@ -39,6 +39,7 @@ interface Project {
   name: string;
   description: string;
   videoUrl?: string;
+  reportVideoUrl?: string;
   startDate: string;
   endDate: string;
   status: string;
@@ -71,6 +72,7 @@ const createEmptyProject = (): Project => {
     name: '',
     description: '',
     videoUrl: '',
+    reportVideoUrl: '',
     startDate,
     endDate,
     status: '',
@@ -113,6 +115,17 @@ const createLocalId = (value: string) => {
   }, 7) || Date.now();
 };
 
+const formatLastSeen = (value?: string | null) => {
+  if (!value) return 'Jamais connecté';
+  const date = new Date(value);
+  const diff = Date.now() - date.getTime();
+
+  if (diff < 60_000) return 'En ligne à l’instant';
+  if (diff < 3_600_000) return `Vu il y a ${Math.max(1, Math.floor(diff / 60_000))} min`;
+  if (diff < 86_400_000) return `Vu il y a ${Math.max(1, Math.floor(diff / 3_600_000))} h`;
+  return `Vu le ${date.toLocaleDateString('fr-FR')} à ${date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+};
+
 const normalizeProject = (project: Partial<Project> | null | undefined): Project => {
   const fallback = createEmptyProject();
   const rawSteps = Array.isArray(project?.steps) ? project.steps : [];
@@ -122,6 +135,7 @@ const normalizeProject = (project: Partial<Project> | null | undefined): Project
     ...fallback,
     ...project,
     videoUrl: typeof project?.videoUrl === 'string' ? project.videoUrl.trim() : '',
+    reportVideoUrl: typeof project?.reportVideoUrl === 'string' ? project.reportVideoUrl.trim() : '',
     steps: rawSteps.map((step, index) => ({
       id: typeof step?.id === 'number' ? step.id : Date.now() + index,
       name: typeof step?.name === 'string' ? step.name : '',
@@ -221,6 +235,7 @@ const App: React.FC = () => {
   const [showAdminMessaging, setShowAdminMessaging] = useState(false);
   const [newMessageCount, setNewMessageCount] = useState(0);
   const [unreadByClient, setUnreadByClient] = useState<Record<string, number>>({});
+  const [lastSeenByClient, setLastSeenByClient] = useState<Record<string, string | null>>({});
   const [conversationClientMap, setConversationClientMap] = useState<Record<string, string>>({});
   const socketRef = useRef<any>(null);
   const editingProjectRef = useRef<Client | null>(null);
@@ -308,8 +323,15 @@ const App: React.FC = () => {
             unreadMap[clientUser.id] = conv.unreadCount || 0;
           }
         });
+        const lastSeenMap = Object.fromEntries(
+          data
+            .map((conv: any) => conv.users.find((u: any) => u.id !== adminUserId))
+            .filter(Boolean)
+            .map((user: any) => [user.id, user.lastSeenAt ?? null])
+        );
         setConversationClientMap(map);
         setUnreadByClient(unreadMap);
+        setLastSeenByClient(lastSeenMap);
         const total = Object.values(unreadMap).reduce((a, b) => a + b, 0);
         baselineUnreadRef.current = total;
         setNewMessageCount(0);
@@ -403,8 +425,15 @@ const App: React.FC = () => {
             unreadMap[clientUser.id] = conv.unreadCount || 0;
           }
         });
+        const lastSeenMap = Object.fromEntries(
+          data
+            .map((conv: any) => conv.users.find((u: any) => u.id !== adminUserId))
+            .filter(Boolean)
+            .map((user: any) => [user.id, user.lastSeenAt ?? null])
+        );
         setConversationClientMap(map);
         setUnreadByClient(unreadMap);
+        setLastSeenByClient(lastSeenMap);
         const total = Object.values(unreadMap).reduce((a, b) => a + b, 0);
         const delta = Math.max(0, total - baselineUnreadRef.current);
         setNewMessageCount(delta);
@@ -897,9 +926,9 @@ const App: React.FC = () => {
               />
             </div>
 
-            <div className="mb-6">
-              <label className="block text-sm font-medium mb-2">Lien vidéo YouTube</label>
-              <input
+                <div className="mb-6">
+                  <label className="block text-sm font-medium mb-2">Lien vidéo YouTube</label>
+                  <input
                 type="url"
                 value={editingProject.project.videoUrl || ''}
                 onChange={(e) => updateEditingProject((current) => ({
@@ -907,9 +936,23 @@ const App: React.FC = () => {
                   project: { ...current.project, videoUrl: e.target.value }
                 }))}
                 placeholder="https://www.youtube.com/watch?v=..."
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-              />
-            </div>
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                  />
+                </div>
+
+                <div className="mb-6">
+                  <label className="block text-sm font-medium mb-2">Vidéo rapport du site</label>
+                  <input
+                    type="url"
+                    value={editingProject.project.reportVideoUrl || ''}
+                    onChange={(e) => updateEditingProject((current) => ({
+                      ...current,
+                      project: { ...current.project, reportVideoUrl: e.target.value }
+                    }))}
+                    placeholder="https://www.youtube.com/watch?v=..."
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                  />
+                </div>
 
             <div className="grid grid-cols-2 gap-4 mb-6">
               <div>
@@ -1415,6 +1458,10 @@ const App: React.FC = () => {
                 <span className="text-sm">{client.contact}</span>
               </div>
 
+              <div className="text-sm text-gray-500 mb-2">
+                Dernière connexion : {formatLastSeen(lastSeenByClient[client.uniqueId])}
+              </div>
+
               <div className="text-xs text-gray-500 mb-4 font-mono bg-gray-50 p-2 rounded">
                 ID: {client.uniqueId}
               </div>
@@ -1633,6 +1680,20 @@ const App: React.FC = () => {
                     onChange={(e) => setEditingProject({ 
                       ...editingProject, 
                       project: { ...editingProject.project, videoUrl: e.target.value }
+                    })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="https://www.youtube.com/watch?v=..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Vidéo rapport du site</label>
+                  <input
+                    type="text"
+                    value={editingProject.project.reportVideoUrl || ''}
+                    onChange={(e) => setEditingProject({
+                      ...editingProject,
+                      project: { ...editingProject.project, reportVideoUrl: e.target.value }
                     })}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="https://www.youtube.com/watch?v=..."

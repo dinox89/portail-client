@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { MessageCircle, Send, User, Clock, CheckCircle, Trash2 } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
-import { TypingIndicator } from '@/components/typing-indicator';
 
 interface Message {
   id: string;
@@ -23,6 +22,8 @@ interface Conversation {
   users: Array<{
     id: string;
     name: string;
+    role?: string;
+    lastSeenAt?: string | null;
   }>;
   messages: Message[];
   lastMessage?: Message;
@@ -38,9 +39,6 @@ export default function AdminMessaging() {
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
-  const [partnerTyping, setPartnerTyping] = useState(false);
-  const typingActiveRef = useRef<boolean>(false);
-  const typingTimeoutRef = useRef<number | null>(null);
   const selectedConvIdRef = useRef<string | null>(null);
   const autoSelectedRef = useRef<boolean>(false);
 
@@ -157,21 +155,12 @@ export default function AdminMessaging() {
         }
         return prev;
       });
-      if (message.senderId !== ADMIN_USER_ID) {
-        setPartnerTyping(false);
-      }
     });
 
     // Écouter les notifications globales admin
     newSocket.on('adminNewMessage', () => {
       // Rafraîchir la liste des conversations pour mettre à jour lastMessage/unreadCount
       fetchConversations();
-    });
-
-    newSocket.on('typing', (payload: { conversationId: string; userId: string; isTyping: boolean }) => {
-      if (payload.conversationId && selectedConvIdRef.current === payload.conversationId && payload.userId !== ADMIN_USER_ID) {
-        setPartnerTyping(payload.isTyping);
-      }
     });
 
     newSocket.on('messageDeleted', (payload: { conversationId: string; messageId: string }) => {
@@ -258,14 +247,6 @@ export default function AdminMessaging() {
     };
   }, [selectedConversation?.id]);
 
-  useEffect(() => {
-    if (!partnerTyping) return;
-    const t = window.setTimeout(() => {
-      inputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    }, 80);
-    return () => window.clearTimeout(t);
-  }, [partnerTyping]);
-
   const selectConversation = async (conversation: Conversation) => {
     // Quitter l'ancienne room si nécessaire
     if (socket && selectedConversation?.id) {
@@ -329,7 +310,6 @@ export default function AdminMessaging() {
         });
         setNewMessage('');
         setSendError(null);
-        emitTypingStopImmediate();
       } else {
         let errMsg = 'Échec de l’envoi du message';
         try {
@@ -379,26 +359,23 @@ export default function AdminMessaging() {
     }
   };
 
-  const emitTypingStart = () => {
-    if (!socket || !selectedConversation?.id) return;
-    if (!typingActiveRef.current) {
-      socket.emit('typing', { conversationId: selectedConversation.id });
-      typingActiveRef.current = true;
-    }
-    window.clearTimeout(typingTimeoutRef.current as any);
-  };
-
-  const emitTypingStopImmediate = () => {
-    window.clearTimeout(typingTimeoutRef.current as any);
-    if (socket && selectedConversation?.id) {
-      socket.emit('stopTyping', { conversationId: selectedConversation.id });
-    }
-    typingActiveRef.current = false;
-  };
-
   const getClientName = (conversation: Conversation) => {
     const clientUser = conversation.users.find(user => user.id !== ADMIN_USER_ID);
     return clientUser?.name || 'Client';
+  };
+
+  const getClientUser = (conversation: Conversation) => {
+    return conversation.users.find(user => user.id !== ADMIN_USER_ID);
+  };
+
+  const formatLastSeen = (value?: string | null) => {
+    if (!value) return 'Jamais connecté';
+    const date = new Date(value);
+    const diff = Date.now() - date.getTime();
+    if (diff < 60_000) return 'En ligne à l’instant';
+    if (diff < 3_600_000) return `Vu il y a ${Math.max(1, Math.floor(diff / 60_000))} min`;
+    if (diff < 86_400_000) return `Vu il y a ${Math.max(1, Math.floor(diff / 3_600_000))} h`;
+    return `Vu le ${date.toLocaleDateString('fr-FR')} à ${date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
   };
 
   return (
@@ -424,9 +401,14 @@ export default function AdminMessaging() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
                   <User className="mr-2 text-gray-500" size={16} />
-                  <span className="font-medium text-gray-800">
-                    {getClientName(conversation)}
-                  </span>
+                  <div>
+                    <span className="font-medium text-gray-800">
+                      {getClientName(conversation)}
+                    </span>
+                    <p className="text-xs text-gray-500">
+                      {formatLastSeen(getClientUser(conversation)?.lastSeenAt)}
+                    </p>
+                  </div>
                 </div>
                 {conversation.unreadCount > 0 && (
                   <span className="bg-red-500 text-white text-xs rounded-full px-2 py-1">
@@ -453,6 +435,9 @@ export default function AdminMessaging() {
               <h3 className="font-semibold text-gray-800">
                 Conversation avec {getClientName(selectedConversation)}
               </h3>
+              <p className="mt-1 text-sm text-gray-500">
+                {formatLastSeen(getClientUser(selectedConversation)?.lastSeenAt)}
+              </p>
             </div>
 
             {/* Messages */}
@@ -494,9 +479,6 @@ export default function AdminMessaging() {
                   </div>
                 </div>
               ))}
-              {partnerTyping && (
-                <TypingIndicator label="Le client est en train d'écrire..." />
-              )}
             </div>
 
             {/* Zone d'envoi */}
@@ -505,16 +487,7 @@ export default function AdminMessaging() {
                 <textarea
                   ref={inputRef}
                   value={newMessage}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setNewMessage(v);
-                    if (v.trim().length > 0) {
-                      emitTypingStart();
-                    } else {
-                      emitTypingStopImmediate();
-                    }
-                  }}
-                  onBlur={emitTypingStopImmediate}
+                  onChange={(e) => setNewMessage(e.target.value)}
                   placeholder="Tapez votre message..."
                   className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none min-h-[44px] max-h-40"
                 />

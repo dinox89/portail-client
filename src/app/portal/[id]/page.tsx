@@ -28,6 +28,7 @@ interface Project {
   name: string;
   description: string;
   videoUrl?: string;
+  reportVideoUrl?: string;
   startDate: string;
   endDate: string;
   status: string;
@@ -62,6 +63,7 @@ const normalizeProject = (project: Partial<Project> | null | undefined): Project
     name: typeof project?.name === 'string' ? project.name : '',
     description: typeof project?.description === 'string' ? project.description : '',
     videoUrl: typeof project?.videoUrl === 'string' ? project.videoUrl.trim() : '',
+    reportVideoUrl: typeof project?.reportVideoUrl === 'string' ? project.reportVideoUrl.trim() : '',
     startDate: typeof project?.startDate === 'string' ? project.startDate : startDate,
     endDate: typeof project?.endDate === 'string' ? project.endDate : endDate,
     status: typeof project?.status === 'string' ? project.status : '',
@@ -125,6 +127,9 @@ export default function ClientPage() {
   const [isIntroductionPlaying, setIsIntroductionPlaying] = useState(false);
   const [isIntroductionReady, setIsIntroductionReady] = useState(false);
   const [introductionThumbnailUrl, setIntroductionThumbnailUrl] = useState("");
+  const [isReportPlaying, setIsReportPlaying] = useState(false);
+  const [isReportReady, setIsReportReady] = useState(false);
+  const [reportThumbnailUrl, setReportThumbnailUrl] = useState("");
   const defaultTitleRef = useRef<string>('');
   const clientUniqueId = client?.uniqueId || '';
   const getYoutubeId = (url: string) => {
@@ -313,6 +318,14 @@ export default function ClientPage() {
   const introductionEmbedUrl = introductionVideoId
     ? `https://www.youtube-nocookie.com/embed/${introductionVideoId}?autoplay=1&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&controls=1&fs=1&cc_load_policy=0`
     : "";
+  const reportVideoUrl = client?.project?.reportVideoUrl || "";
+  const reportVideoId = getYoutubeId(reportVideoUrl);
+  const defaultReportThumbnailUrl = reportVideoId
+    ? `https://i.ytimg.com/vi/${reportVideoId}/maxresdefault.jpg`
+    : "";
+  const reportEmbedUrl = reportVideoId
+    ? `https://www.youtube-nocookie.com/embed/${reportVideoId}?autoplay=1&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&controls=1&fs=1&cc_load_policy=0`
+    : "";
 
   useEffect(() => {
     setIsIntroductionPlaying(false);
@@ -322,6 +335,15 @@ export default function ClientPage() {
   useEffect(() => {
     setIntroductionThumbnailUrl(defaultIntroductionThumbnailUrl);
   }, [defaultIntroductionThumbnailUrl]);
+
+  useEffect(() => {
+    setIsReportPlaying(false);
+    setIsReportReady(false);
+  }, [reportVideoUrl]);
+
+  useEffect(() => {
+    setReportThumbnailUrl(defaultReportThumbnailUrl);
+  }, [defaultReportThumbnailUrl]);
 
   useEffect(() => {
     const onVisibility = () => {
@@ -418,7 +440,7 @@ export default function ClientPage() {
   };
 
   const FORM_URL = "https://tally.so/r/wQgVk1";
-  const tabs = ["introduction", "project", "files", "formulaire", "chat"] as const;
+  const tabs = ["introduction", "project", "files", "formulaire", "chat", "report"] as const;
 
   if (loading) {
     return (
@@ -574,6 +596,9 @@ export default function ClientPage() {
                       {tab === "chat" && (
                         <MessageSquare className="w-5 h-5" />
                       )}
+                      {tab === "report" && (
+                        <PlayCircle className="w-5 h-5" />
+                      )}
                     </span>
                     
                     {chatUnread > 0 && (
@@ -593,6 +618,8 @@ export default function ClientPage() {
                         ? "Formulaire"
                         : tab === "chat"
                         ? "Chat"
+                        : tab === "report"
+                        ? "Rapport de votre site"
                         : "Contact"}
                     </span>
                   </button>
@@ -665,6 +692,77 @@ export default function ClientPage() {
                         <h3 className="text-xl font-semibold text-gray-900">Introduction bientôt disponible</h3>
                         <p className="mt-2 text-sm text-gray-600 sm:text-base">
                           La vidéo d&apos;introduction n&apos;a pas encore été ajoutée pour ce projet.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "report" && (
+              <div className="space-y-8">
+                <div className="bg-white/80 backdrop-blur-2xl rounded-3xl shadow-2xl border border-gray-200/60 overflow-hidden">
+                  <div className="p-6 sm:p-8">
+                    {reportVideoId ? (
+                      <div className="relative overflow-hidden rounded-[28px] border border-gray-200 bg-slate-950 shadow-[0_30px_80px_rgba(15,23,42,0.28)]">
+                        <div className="relative pt-[56.25%]">
+                          {!isReportPlaying ? (
+                            <button
+                              type="button"
+                              onClick={() => setIsReportPlaying(true)}
+                              className="group absolute inset-0 flex h-full w-full items-center justify-center overflow-hidden"
+                              aria-label="Lire le rapport vidéo"
+                            >
+                              <img
+                                src={reportThumbnailUrl}
+                                alt="Aperçu du rapport vidéo"
+                                className="absolute inset-0 h-full w-full object-cover opacity-80 transition duration-500 group-hover:scale-[1.03] group-hover:opacity-100"
+                                loading="eager"
+                                decoding="async"
+                                referrerPolicy="no-referrer"
+                                onError={() => {
+                                  const fallbackThumbnail = reportVideoId
+                                    ? `https://i.ytimg.com/vi/${reportVideoId}/hqdefault.jpg`
+                                    : "";
+                                  if (fallbackThumbnail && reportThumbnailUrl !== fallbackThumbnail) {
+                                    setReportThumbnailUrl(fallbackThumbnail);
+                                  }
+                                }}
+                              />
+                              <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.08),rgba(15,23,42,0.36))] transition duration-500 group-hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.03),rgba(15,23,42,0.24))]" />
+                            </button>
+                          ) : (
+                            <>
+                              {!isReportReady && (
+                                <div className="pointer-events-none absolute inset-x-0 bottom-6 z-10 px-6">
+                                  <div className="w-full overflow-hidden rounded-full bg-white/15">
+                                    <div className="h-1.5 w-1/3 rounded-full bg-gradient-to-r from-white via-slate-200 to-white animate-[gradient_1.8s_ease-in-out_infinite]" />
+                                  </div>
+                                </div>
+                              )}
+                              <iframe
+                                className="absolute inset-0 h-full w-full"
+                                src={reportEmbedUrl}
+                                title="Rapport de votre site"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowFullScreen
+                                loading="lazy"
+                                referrerPolicy="strict-origin-when-cross-origin"
+                                onLoad={() => setIsReportReady(true)}
+                              />
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-[28px] border border-dashed border-gray-300 bg-gradient-to-br from-gray-50 to-white p-10 text-center">
+                        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100 text-gray-400">
+                          <PlayCircle size={30} />
+                        </div>
+                        <h3 className="text-xl font-semibold text-gray-900">Rapport bientôt disponible</h3>
+                        <p className="mt-2 text-sm text-gray-600 sm:text-base">
+                          Le rapport vidéo de votre site n&apos;a pas encore été ajouté.
                         </p>
                       </div>
                     )}
