@@ -100,13 +100,13 @@ L'application utilise un serveur personnalise, donc le dev et la prod passent pa
 
 ## Deploiement Railway
 
-Commande de build recommandee:
+Commande de build recommandee (ne depend pas de la DB):
 
 ```bash
 npm install --production=false && npm run build:deploy
 ```
 
-Commande de demarrage:
+Commande de demarrage (applique les migrations puis demarre le serveur):
 
 ```bash
 npm run start
