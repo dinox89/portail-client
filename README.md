@@ -56,9 +56,12 @@ ADMIN_PASSWORD=
 ADMIN_SESSION_SECRET=
 REALTIME_JWT_SECRET=
 DATABASE_URL=
+DIRECT_URL=
 ALLOWED_ORIGINS=
 PORT=3000
 ```
+
+`DIRECT_URL` est optionnel. Si tu utilises un endpoint Neon "pooler" dans `DATABASE_URL`, mets l'endpoint "direct" dans `DIRECT_URL` pour fiabiliser les migrations.
 
 Variables optionnelles pour ajuster le comportement Socket.IO:
 
@@ -68,6 +71,14 @@ NEXT_PUBLIC_SOCKET_RECONNECT_DELAY=500
 NEXT_PUBLIC_SOCKET_RECONNECT_DELAY_MAX=10000
 NEXT_PUBLIC_SOCKET_TIMEOUT=8000
 NEXT_PUBLIC_PERF_DELAY=0
+```
+
+Variables optionnelles pour fiabiliser `prisma migrate deploy` (cold start / reseau):
+
+```bash
+PRISMA_MIGRATE_DEPLOY_RETRIES=8
+PRISMA_MIGRATE_DEPLOY_DELAY_MS=1500
+PRISMA_MIGRATE_DEPLOY_DELAY_MAX_MS=15000
 ```
 
 ## Demarrage local

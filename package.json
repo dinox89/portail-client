@@ -13,7 +13,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:reset": "prisma migrate reset",
-    "migrate:deploy": "PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK=1 prisma migrate deploy",
+    "migrate:deploy": "node scripts/migrate-deploy.mjs",
     "build:deploy": "npm run db:generate && npm run build"
   },
   "dependencies": {
