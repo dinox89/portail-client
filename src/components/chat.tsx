@@ -39,12 +39,15 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
   const [sendError, setSendError] = useState<string | null>(null);
   const [messageActionError, setMessageActionError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const onNewMessageRef = useRef<(() => void) | undefined>(onNewMessage);
   useEffect(() => { onNewMessageRef.current = onNewMessage; }, [onNewMessage]);
   const prevIdsRef = useRef<Set<string>>(new Set());
   const pendingSendCountRef = useRef(0);
+  const lastServerKeyRef = useRef<string>("");
+  const shouldAutoScrollRef = useRef<boolean>(true);
 
   const dedupeMessages = (list: Message[]) => {
     const seen = new Set<string>();
@@ -112,6 +115,18 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
     return `${url}${joiner}portalToken=${encodeURIComponent(portalToken)}`;
   };
 
+  const getServerKey = (list: Message[]) => {
+    const lastId = list.length > 0 ? list[list.length - 1]?.id : "";
+    return `${list.length}:${lastId || ""}`;
+  };
+
+  const updateAutoScroll = () => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    shouldAutoScrollRef.current = distanceFromBottom < 120;
+  };
+
   // Load messages on mount
   useEffect(() => {
     if (!conversationId) return;
@@ -122,8 +137,11 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
         if (res.ok) {
           const data = await res.json();
           const initial = Array.isArray(data) ? data : [];
-          setMessages(dedupeMessages(initial));
-          prevIdsRef.current = new Set(initial.map((m: any) => m.id));
+          const deduped = dedupeMessages(initial);
+          setMessages(deduped);
+          prevIdsRef.current = new Set(deduped.map((m: any) => m.id));
+          lastServerKeyRef.current = getServerKey(deduped);
+          shouldAutoScrollRef.current = true;
         }
       } catch (error) {
         console.error("Erreur lors du chargement des messages:", error);
@@ -230,6 +248,9 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
         const data = await res.json();
         if (!Array.isArray(data)) return;
         const deduped = dedupeMessages(data);
+        const serverKey = getServerKey(deduped);
+        if (serverKey === lastServerKeyRef.current) return;
+        lastServerKeyRef.current = serverKey;
         const prevSet = prevIdsRef.current;
         let hasNewOther = false;
         for (const m of deduped) {
@@ -255,6 +276,9 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
   }, [conversationId, currentUser?.id, portalToken]);
 
   useEffect(() => {
+    const last = messages.length > 0 ? messages[messages.length - 1] : null;
+    const lastIsOwn = !!last && last.senderId === currentUser.id;
+    if (!shouldAutoScrollRef.current && !lastIsOwn) return;
     const delay = getPerfDelay();
     if (delay > 0) {
       const t = setTimeout(() => {
@@ -268,6 +292,7 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
 
   useEffect(() => {
     if (!conversationId) return;
+    shouldAutoScrollRef.current = true;
     const delay = getPerfDelay();
     const t = setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
@@ -299,6 +324,7 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
     };
 
     pendingSendCountRef.current += 1;
+    shouldAutoScrollRef.current = true;
     setMessages((prev) => [...prev, optimisticMessage]);
     setInput("");
     setSendError(null);
@@ -387,7 +413,11 @@ export default function Chat({ conversationId, currentUser, portalToken, onNewMe
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+      <div
+        ref={messagesContainerRef}
+        onScroll={updateAutoScroll}
+        className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar"
+      >
         {messages.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
             <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
