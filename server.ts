@@ -14,28 +14,30 @@ const handle = app.getRequestHandler();
 
 // Prepare the app and then create the server
 app.prepare().then(async () => {
-  // Seed admin user if missing (required for auth handshake and notifications)
-  try {
-    const adminId = process.env.NEXT_PUBLIC_ADMIN_USER_ID || "admin-user-id";
-    const adminEmail = process.env.ADMIN_EMAIL || "admin@example.com";
-    await db.user.upsert({
-      where: { id: adminId },
-      update: {
-        email: adminEmail,
-        role: "admin",
-        name: "Admin",
-      },
-      create: {
-        id: adminId,
-        email: adminEmail,
-        role: "admin",
-        name: "Admin",
-      },
-    });
-    console.log(`> Admin user ensured: ${adminId} (${adminEmail})`);
-  } catch (e) {
-    console.error("Failed ensuring admin user:", e);
-  }
+  const ensureAdminUser = async () => {
+    // Seed admin user if missing (non-bloquant: ne doit pas empecher le serveur d'ecouter)
+    try {
+      const adminId = process.env.NEXT_PUBLIC_ADMIN_USER_ID || "admin-user-id";
+      const adminEmail = process.env.ADMIN_EMAIL || "admin@example.com";
+      await db.user.upsert({
+        where: { id: adminId },
+        update: {
+          email: adminEmail,
+          role: "admin",
+          name: "Admin",
+        },
+        create: {
+          id: adminId,
+          email: adminEmail,
+          role: "admin",
+          name: "Admin",
+        },
+      });
+      console.log(`> Admin user ensured: ${adminId} (${adminEmail})`);
+    } catch (e) {
+      console.error("Failed ensuring admin user:", e);
+    }
+  };
 
   const server = createServer(async (req, res) => {
     try {
@@ -44,11 +46,8 @@ app.prepare().then(async () => {
       const parsedUrl = parse(req.url!, true);
       const { pathname, query } = parsedUrl;
 
-      // Let Socket.IO handle its own endpoint
-      if (pathname === "/socket.io") {
-        // Socket.IO will handle this
-        return;
-      }
+      // Let Socket.IO handle its own endpoint (do not forward to Next)
+      if (pathname?.startsWith("/socket.io")) return;
 
       await handle(req, res, parsedUrl);
     } catch (err) {
@@ -68,6 +67,7 @@ app.prepare().then(async () => {
     })
     .listen(port, () => {
       console.log(`> Ready on http://${hostname}:${port}`);
+      void ensureAdminUser();
     });
 }).catch((err) => {
   console.error("Error starting server:", err);

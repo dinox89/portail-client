@@ -117,7 +117,7 @@ Commande de build recommandee (ne depend pas de la DB):
 npm install --production=false && npm run build:deploy
 ```
 
-Commande de demarrage (applique les migrations puis demarre le serveur):
+Commande de demarrage (demarre le serveur puis tente d'appliquer les migrations en arriere-plan):
 
 ```bash
 npm run start
